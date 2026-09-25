@@ -24,6 +24,12 @@ from app.domain.krw import (
         ("금 350,000,000원", 350_000_000),
         ("사업비는 약 2억 원 규모로", 200_000_000),
         ("총 1조 2천억원", 1_200_000_000_000),
+        # spoken: the unit after the tail is left out (found by `manage eval llm`, case r14)
+        ("내년도에 2억 8천 정도 들 것으로", 280_000_000),
+        ("1억 5백 규모", 105_000_000),
+        ("1조 2천", 1_200_000_000_000),
+        ("5만 3천원", 53_000),  # after 만 the tail is literal
+        ("3억 5천만원을 편성", 350_000_000),  # explicit 만 unchanged
     ],
 )
 def test_parse_krw_spoken_and_written_forms(text: str, expected: int) -> None:
