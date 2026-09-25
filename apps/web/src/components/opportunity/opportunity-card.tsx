@@ -12,7 +12,9 @@ type Card = Schemas["OpportunityCard"];
 
 export function OpportunityCard({ item }: { item: Card }) {
   const lead = leadLabel(item.lead_days);
-  const headStart = headStartLabel(item.head_start_days);
+  // Only once the tender is out: then it is a fact, and it doesn't compete with the
+  // "입찰 약 N개월 후" countdown that pre-tender cards already show.
+  const headStart = item.bid_published_at ? headStartLabel(item.head_start_days) : null;
   return (
     <Link
       href={`/app/opportunities/${item.id}`}
@@ -25,12 +27,7 @@ export function OpportunityCard({ item }: { item: Card }) {
             <Badge>{item.category_label}</Badge>
             {item.status === "bid_open" ? <Badge tone="warning">{STATUS_LABEL.bid_open}</Badge> : null}
             {lead ? <Badge tone="outline">입찰 {lead}</Badge> : null}
-            {headStart ? (
-              <Badge tone="good">
-                공고 {item.bid_published_at ? "" : "약 "}
-                {headStart} 전 포착
-              </Badge>
-            ) : null}
+            {headStart ? <Badge tone="good">공고 {headStart} 전 포착</Badge> : null}
           </div>
           <h3 className="mt-2 text-[16px] leading-snug font-semibold text-ink group-hover:text-accent-text">
             {item.title}
