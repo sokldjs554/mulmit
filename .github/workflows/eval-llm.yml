@@ -1,0 +1,82 @@
+# Runs `manage eval llm` on demand: the hand-written set through each Claude model/effort pair,
+# scored after the grounding verifier, with cost and latency (docs/evaluation-llm.md).
+#
+# It spends real money (about $5 for the default set; `--max-usd` stops the calls), so it never
+# runs on push or pull_request — only when someone with write access starts it. The result is
+# pushed to an `eval/llm-<run id>` branch to be reviewed and merged as a PR like any change.
+#
+# Setup once: Settings → Secrets and variables → Actions → New repository secret
+#             ANTHROPIC_API_KEY
+name: LLM eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Space-separated: heuristic | <model> | <model>:<effort>. Empty = default set"
+        required: false
+        default: ""
+      max_usd:
+        description: "Stop calling the API once this much (USD) is spent"
+        required: false
+        default: "10"
+
+permissions:
+  contents: write # push the results branch
+
+concurrency:
+  group: eval-llm
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    name: Claude model × effort comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/api
+    env:
+      APP_LOG_JSON: "false"
+      MODELS: ${{ inputs.models }}
+      MAX_USD: ${{ inputs.max_usd }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.17"
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: uv sync --frozen
+      - name: Estimate
+        run: |
+          set -f  # model specs are words, never globs
+          args=(); for m in $MODELS; do args+=(--model "$m"); done
+          uv run manage eval llm "${args[@]}" --max-usd "$MAX_USD" --dry-run
+      - name: Run
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          test -n "$ANTHROPIC_API_KEY" || { echo "::error::Add the ANTHROPIC_API_KEY repository secret first"; exit 1; }
+          set -f
+          args=(); for m in $MODELS; do args+=(--model "$m"); done
+          uv run manage eval llm "${args[@]}" --max-usd "$MAX_USD" \
+            --report ../../docs/evaluation-llm.md > "$RUNNER_TEMP/eval-llm.json"
+          cat ../../docs/evaluation-llm.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: eval-llm
+          path: |
+            docs/evaluation-llm.md
+            ${{ runner.temp }}/eval-llm.json
+      - name: Push the report to a branch
+        run: |
+          branch="eval/llm-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add ../../docs/evaluation-llm.md
+          git commit -m "docs(eval): Claude model × effort comparison (run ${GITHUB_RUN_ID})"
+          git push origin "$branch"
+          echo "Report pushed to \`$branch\` — open a PR from it." >> "$GITHUB_STEP_SUMMARY"

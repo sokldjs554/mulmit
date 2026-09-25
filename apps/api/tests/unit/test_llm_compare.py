@@ -107,6 +107,8 @@ def test_candidate_specs() -> None:
     assert not Candidate.parse("heuristic").is_llm
     with pytest.raises(ValueError, match="unknown effort"):
         Candidate.parse("claude-opus-5:fast")
+    with pytest.raises(ValueError, match="unknown model"):
+        Candidate.parse("claude-*")  # a typo or glob would otherwise be priced as Opus
 
 
 async def test_verifier_drops_invented_signals_and_fixes_amounts() -> None:
