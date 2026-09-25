@@ -726,6 +726,34 @@ class _Builder:
             self.records["fixture_bid"].append(rec)
             self.doc_truth[f"fixture_bid:{rec.external_id}"] = []
 
+        # 발주계획 filed under a bare "중구청"/"동구" with no 기관코드: six 광역시 have a 중구, so the
+        # resolver must refuse to guess and the signal lands in the operator review queue.
+        ambiguous = ("중구청", "중구", "동구청", "동구")
+        interesting = (
+            "스마트 버스정류장 설치 사업",
+            "공영주차장 주차관제시스템 구축",
+            "경로당 스마트 돌봄 플랫폼 구축",
+            "하천 수위 원격감시 시스템 구축",
+        )
+        for _ in range(max(2, round(4 * self.scale))):
+            on = self.anchor - timedelta(days=rng.randint(3, 60))
+            no = f"R{on:%y}DD{self._next():08d}"
+            item = {
+                "orderPlanUntyNo": no,
+                "bizNm": f"{on.year + 1}년 {rng.choice(interesting)}",
+                "orderInsttNm": rng.choice(ambiguous),
+                "sumOrderAmt": str(rng.randint(3, 30) * 50_000_000),
+                "orderYear": str(on.year + 1),
+                "orderMnth": f"{rng.randint(2, 6):02d}",
+                "cntrctMthdNm": "제한경쟁",
+                "nticeDt": f"{on:%Y-%m-%d} 09:00:00",
+            }
+            rec = map_item("order_plan", item)
+            assert rec is not None
+            rec.structured["synthetic"] = True
+            self.records["fixture_order_plan"].append(rec)
+            self.doc_truth[f"fixture_order_plan:{rec.external_id}"] = []
+
 
 _DOC_TYPE_BY_KEY: dict[str, Any] = {
     "fixture_order_plan": "order_plan",
