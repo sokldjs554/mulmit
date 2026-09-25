@@ -168,7 +168,7 @@ export default function OpportunityPage() {
       <HeadStart detail={data} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="추정 예산" value={formatKRW(data.est_budget_krw)} sub="가장 최근 문서 기준" />
+        <StatTile label="추정 예산" value={formatKRW(data.est_budget_krw)} sub="가장 진행된 단계의 문서 기준" />
         {data.bid_published_at ? (
           <StatTile label="입찰공고" value={formatDate(data.bid_published_at)} sub="나라장터에 올라온 날" />
         ) : (
@@ -216,7 +216,7 @@ export default function OpportunityPage() {
           <Card className="p-5">
             <p className="mb-3 text-[13px] font-medium text-ink">이 추천, 도움이 됐나요?</p>
             <FeedbackBar id={data.id} current={data.feedback} />
-            <p className="mt-2 text-[12px] text-muted">남겨 주신 의견은 다음 추천 순서를 정할 때 반영돼요.</p>
+            <p className="mt-2 text-[12px] text-muted">‘관련 없어요’나 ‘숨기기’를 누르면 피드와 알림에서 빠져요. 남겨 주신 의견은 추천 모델을 학습시킬 때도 써요.</p>
           </Card>
         </div>
       </div>

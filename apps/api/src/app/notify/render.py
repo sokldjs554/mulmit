@@ -25,8 +25,14 @@ _TEST_NOTE = "알림이 잘 도착하는지 확인하려고 보낸 메시지예�
 
 
 def when(item: dict[str, Any]) -> str:
-    # Payloads queued before "when" existed carry only the bare forecast window.
-    return str(item.get("when") or f"입찰 예상 {item.get('window') or '미정'}")
+    if item.get("when"):
+        return str(item["when"])
+    # Payloads queued before "when" existed carry the old label: "공고됨(2026.06.01)",
+    # "2026.07~2026.12" or "미정".
+    window = str(item.get("window") or "미정")
+    if window.startswith("공고됨("):
+        return f"{window[4:].rstrip(')')} 입찰공고"
+    return "입찰 시기 미정" if window == "미정" else f"입찰 예상 {window}"
 
 
 _env.globals.update(when=when, test_note=_TEST_NOTE)
@@ -67,6 +73,15 @@ def render_slack(payload: dict[str, Any]) -> dict[str, Any]:
         elif item.get("evidence_note"):
             text += f"\n{item['evidence_note']}"
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
+    hidden = max(len(payload["items"]) - 10, 0) + int(payload.get("more") or 0)
+    if hidden:
+        feed = payload.get("feed_url") or payload["settings_url"]
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"<{feed}|나머지 {hidden}건도 보기>"},
+            }
+        )
     blocks.append(
         {
             "type": "context",
@@ -85,6 +100,6 @@ def render_kakao_variables(payload: dict[str, Any]) -> dict[str, str]:
         "#{기관}": str(first.get("institution", "")),
         "#{사업명}": str(first.get("title", ""))[:40],
         "#{단계}": str(first.get("stage_label", "")),
-        "#{건수}": str(len(payload["items"])),
+        "#{건수}": str(len(payload["items"]) + int(payload.get("more") or 0)),
         "#{링크}": str(first.get("url", payload.get("settings_url", ""))),
     }

@@ -72,3 +72,12 @@ def resolve_timing(text: str, reference: date) -> Timing | None:
             year += 1
         return Timing(year, half, "하반기" if half == "H2" else "상반기")
     return None
+
+
+def month_span(start: date, end: date | None = None) -> str:
+    """A window as people say it: "2026년 7월", "2026년 9~11월", "2026년 11월~2027년 2월"."""
+    if end is None or (start.year, start.month) == (end.year, end.month):
+        return f"{start.year}년 {start.month}월"
+    if start.year == end.year:
+        return f"{start.year}년 {start.month}~{end.month}월"
+    return f"{start.year}년 {start.month}월~{end.year}년 {end.month}월"

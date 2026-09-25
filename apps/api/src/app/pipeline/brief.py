@@ -11,7 +11,6 @@ charged; a double-clicked button returns the already-generated brief.
 
 from __future__ import annotations
 
-import re
 from datetime import date
 
 from sqlalchemy import select
@@ -31,17 +30,22 @@ from app.db.models import (
 )
 from app.domain.krw import format_krw
 from app.domain.stages import STAGE_LABEL, Stage
+from app.domain.timing import month_span
+from app.llm.prompts import BriefFacts, BriefSignal, PastTender
 from app.runtime import Runtime
 
-__all__ = ["InsufficientCreditsError", "build_facts", "generate_brief", "template_brief"]
+__all__ = [
+    "InsufficientCreditsError",
+    "OpportunityNotFoundError",
+    "build_facts",
+    "generate_brief",
+    "template_brief",
+]
 
-COMMITMENT_KO = {
-    "committed": "확약(반영·편성)",
-    "planned": "추진 계획",
-    "reviewing": "검토 중",
-    "declined": "어렵다는 답변",
-}
-STATUS_KO = {"open": "공고 전", "bid_open": "입찰 진행", "closed": "종료", "dormant": "휴면"}
+
+class OpportunityNotFoundError(LookupError):
+    pass
+
 
 # Template-mode advice by the stage the opportunity has reached: what a seller can still
 # influence, and what can still go wrong. Written the way a colleague would say it.
@@ -88,33 +92,22 @@ _STAGE_ADVICE: dict[Stage, tuple[list[str], list[str]]] = {
 }
 
 # How a council answer reads in the brief's timeline.
-_COMMITMENT_SAID = {
-    "확약(반영·편성)": "'반영하겠다'고 답했어요.",
-    "추진 계획": "추진하겠다는 계획을 밝혔어요.",
-    "검토 중": "'검토하겠다'는 정도였어요.",
-    "어렵다는 답변": "'어렵다'고 답했어요.",
+_SAID = {
+    "committed": "'반영하겠다'고 답했어요.",
+    "planned": "추진하겠다는 계획을 밝혔어요.",
+    "reviewing": "'검토하겠다'는 정도였어요.",
+    "declined": "'어렵다'고 답했어요.",
 }
-_WEAK = ("검토 중", "어렵다는 답변")
+_WEAK = ("reviewing", "declined")
 
 
-def _dot(iso: str) -> str:
-    return iso.strip().replace("-", ".")
+def _dot(d: date) -> str:
+    return f"{d:%Y.%m.%d}"
 
 
-def _window_span(window: str) -> str | None:
-    """ "2026-09-01 ~ 2026-11-30" → "2026년 9~11월"; None when there is no forecast."""
-    dates = re.findall(r"(\d{4})-(\d{2})-\d{2}", window)
-    if not dates:
-        return None
-    (y1, m1), (y2, m2) = dates[0], dates[-1]
-    if (y1, m1) == (y2, m2):
-        return f"{y1}년 {int(m1)}월"
-    if y1 == y2:
-        return f"{y1}년 {int(m1)}~{int(m2)}월"
-    return f"{y1}년 {int(m1)}월~{y2}년 {int(m2)}월"
-
-
-async def build_facts(session: AsyncSession, opp: Opportunity, org_id: int) -> str:
+async def build_facts(
+    session: AsyncSession, opp: Opportunity, org_id: int, *, today: date | None = None
+) -> BriefFacts:
     inst = await session.get(InstitutionRow, opp.institution_code) if opp.institution_code else None
     signals = (
         await session.scalars(
@@ -137,120 +130,101 @@ async def build_facts(session: AsyncSession, opp: Opportunity, org_id: int) -> s
         )
     ).all()
     profile = await session.get(CompanyProfile, org_id)
-    window = (
-        f"{opp.bid_window_start} ~ {opp.bid_window_end or opp.bid_window_start}"
-        if opp.bid_window_start
-        else "미정"
+    return BriefFacts(
+        today=today or today_kst(),
+        title=opp.title,
+        institution=inst.name if inst else None,
+        department=opp.department,
+        stage=Stage(opp.stage),
+        status=opp.status,
+        est_budget_krw=opp.est_budget_krw,
+        window_start=opp.bid_window_start,
+        window_end=opp.bid_window_end,
+        bid_published_at=opp.bid_published_at,
+        best_commitment=opp.best_commitment,
+        conversion_prob=opp.conversion_prob,
+        signals=tuple(
+            BriefSignal(
+                observed_at=s.observed_at,
+                stage=Stage(s.stage),
+                title=s.title,
+                budget_krw=s.budget_krw,
+                commitment=s.commitment,
+                quote=str(next((e.get("quote", "") for e in s.evidence if e.get("found")), ""))[
+                    :300
+                ],
+            )
+            for s in signals
+        ),
+        history=tuple(
+            PastTender(h.bid_published_at, h.title, h.est_budget_krw)
+            for h in history
+            if h.bid_published_at
+        ),
+        profile=(
+            (
+                f"- 소개: {profile.description or '-'}",
+                f"- 주력 키워드: {', '.join(profile.keywords) or '-'}",
+                f"- 선호 예산 범위: {profile.budget_min or '-'} ~ {profile.budget_max or '-'}",
+            )
+            if profile
+            else ()
+        ),
     )
-    lines = [
-        "# 기회",
-        f"- 사업명: {opp.title}",
-        f"- 기관: {inst.name if inst else '미상'}",
-        *([f"- 부서: {opp.department}"] if opp.department else []),
-        f"- 현재 단계: {STAGE_LABEL[Stage(opp.stage)]} ({STATUS_KO.get(opp.status, opp.status)})",
-        f"- 추정 예산: {format_krw(opp.est_budget_krw) if opp.est_budget_krw else '미상'}",
-        f"- 입찰 예상 시기: {window}",
-        *([f"- 입찰공고일: {opp.bid_published_at}"] if opp.bid_published_at else []),
-        f"- 가장 강한 의지 표현: {COMMITMENT_KO.get(opp.best_commitment or '', '없음')}",
-        f"- 공고 전환 확률(추정): {opp.conversion_prob:.0%}",
-        "",
-        "# 신호 (시간순, 원문 인용)",
-    ]
-    for s in signals:
-        quote = next((e["quote"] for e in s.evidence if e.get("found")), "")
-        budget = f", 금액 {format_krw(s.budget_krw)}" if s.budget_krw else ""
-        lines.append(
-            f"- {s.observed_at} [{STAGE_LABEL[Stage(s.stage)]}] {s.title}{budget}, "
-            f"{COMMITMENT_KO.get(s.commitment or '', '의지 표현 없음')}: 「{quote[:300]}」"
-        )
-    lines += ["", "# 이 기관의 최근 발주 이력"]
-    lines += [
-        f"- {h.bid_published_at} {h.title} ({format_krw(h.est_budget_krw) if h.est_budget_krw else '금액 미상'})"
-        for h in history
-    ] or ["- (수집된 이력 없음)"]
-    lines += ["", "# 우리 회사 프로필"]
-    if profile:
-        lines += [
-            f"- 소개: {profile.description or '-'}",
-            f"- 주력 키워드: {', '.join(profile.keywords) or '-'}",
-            f"- 선호 예산 범위: {profile.budget_min or '-'} ~ {profile.budget_max or '-'}",
-        ]
-    return "\n".join(lines)
 
 
-_SIGNAL_LINE = re.compile(
-    r"^- (?P<date>\d{4}-\d{2}-\d{2}) \[(?P<stage>[^\]]+)\] (?P<title>.+?)"
-    r"(?:, 금액 (?P<budget>.+?))?, (?P<said>[^,:]+): 「(?P<quote>.*)」$"
-)
-_HISTORY_LINE = re.compile(r"^- (?P<date>\d{4}-\d{2}-\d{2}) (?P<rest>.+)$")
-
-
-def template_brief(facts: str) -> str:
+def template_brief(facts: BriefFacts) -> str:
     """Deterministic brief used when no LLM is configured or the call fails. It reads the same
     facts the model would get, and says nothing the facts do not."""
-
-    def section(name: str) -> list[str]:
-        m = re.search(rf"# {name}\n(.*?)(?:\n# |\Z)", facts, re.S)
-        return [ln for ln in (m.group(1).splitlines() if m else []) if ln.strip()]
-
-    fields = {}
-    for ln in section("기회"):
-        key, sep, value = ln.removeprefix("- ").partition(": ")
-        if sep:
-            fields[key] = value.strip()
-    signals = [m for ln in section(r"신호 \(시간순, 원문 인용\)") if (m := _SIGNAL_LINE.match(ln))]
-    history = [m for ln in section("이 기관의 최근 발주 이력") if (m := _HISTORY_LINE.match(ln))]
-
-    title = fields.get("사업명", "이 사업")
-    institution = fields.get("기관", "미상")
-    department = fields.get("부서")
-    who = " ".join(x for x in (institution if institution != "미상" else "", department) if x)
-    stage_label = fields.get("현재 단계", "").split(" (")[0]
-    stage = next((st for st, label in STAGE_LABEL.items() if label == stage_label), Stage.COUNCIL)
-    budget = fields.get("추정 예산", "미상")
-    published = fields.get("입찰공고일")
-    span = _window_span(fields.get("입찰 예상 시기", ""))
-    if published:
-        timing, when = f"입찰공고는 {_dot(published)}에 나왔어요.", f"- 입찰공고: {_dot(published)}"
+    who = " ".join(x for x in (facts.institution, facts.department) if x)
+    stage_label = STAGE_LABEL[facts.stage]
+    span = month_span(facts.window_start, facts.window_end) if facts.window_start else None
+    last_day = facts.window_end or facts.window_start
+    if facts.bid_published_at:
+        timing = f"입찰공고는 {_dot(facts.bid_published_at)}에 나왔어요."
+        when = f"- 입찰공고: {_dot(facts.bid_published_at)}"
+    elif span and last_day and last_day < facts.today:
+        timing = f"예상했던 입찰 시기({span})가 지났는데 아직 공고는 안 나왔어요."
+        when = f"- 입찰 예상 시기: {span} (지났지만 아직 공고 없음)"
     elif span:
-        timing, when = f"입찰은 {span}쯤 나올 것으로 보고 있어요.", f"- 입찰 예상 시기: {span}"
+        timing = f"입찰은 {span}쯤 나올 것으로 보고 있어요."
+        when = f"- 입찰 예상 시기: {span}"
     else:
-        timing, when = "입찰 시기는 아직 가늠하기 어려워요.", "- 입찰 시기: 아직 가늠하기 어려워요."
-    prob = fields.get("공고 전환 확률(추정)")
+        timing = "입찰 시기는 아직 가늠하기 어려워요."
+        when = "- 입찰 시기: 아직 가늠하기 어려워요."
+    budget = format_krw(facts.est_budget_krw) if facts.est_budget_krw else None
 
-    actions, risks = _STAGE_ADVICE.get(stage, _STAGE_ADVICE[Stage.BID])
-    if signals and signals[-1]["said"] in _WEAK:
+    actions, risks = _STAGE_ADVICE.get(facts.stage, _STAGE_ADVICE[Stage.BID])
+    council = [s for s in facts.signals if s.stage is Stage.COUNCIL]
+    if council and council[-1].commitment in _WEAK:
         risks = [
             *risks,
             "가장 최근 발언이 확약은 아니었어요. 다음 회기 회의록과 예산서를 꼭 확인해 보세요.",
         ]
 
-    summary = f"{who + '의 ' if who else ''}「{title}」 건이에요. 지금은 {stage_label or '초기'} 단계예요. {timing}"
-    if budget != "미상":
+    summary = f"{who + '의 ' if who else ''}「{facts.title}」 건이에요. 지금은 {stage_label} 단계예요. {timing}"
+    if budget:
         summary += f" 예산은 {budget}으로 잡혀 있어요."
 
     timeline: list[str] = []
-    for s in signals:
-        head = f"- **{_dot(s['date'])} · {s['stage']}** — {s['title']}"
-        if s["budget"]:
-            head += f" ({s['budget']})"
-        said = _COMMITMENT_SAID.get(s["said"]) if s["stage"] == STAGE_LABEL[Stage.COUNCIL] else None
+    for s in facts.signals:
+        head = f"- **{_dot(s.observed_at)} · {STAGE_LABEL[s.stage]}** — {s.title}"
+        if s.budget_krw:
+            head += f" ({format_krw(s.budget_krw)})"
+        said = _SAID.get(s.commitment or "") if s.stage is Stage.COUNCIL else None
         timeline.append(f"{head}. {said}" if said else head)
-        if s["quote"].strip("…").strip():
-            timeline.append(f"  > 「{s['quote']}」")
+        if s.one_line_quote.strip("…").strip():
+            timeline.append(f"  > 「{s.one_line_quote}」")
 
     money = [
-        f"- 추정 예산: {budget} (가장 최근 문서 기준)"
-        if budget != "미상"
+        f"- 추정 예산: {budget} (가장 진행된 단계의 문서 기준)"
+        if budget
         else "- 추정 예산: 아직 금액이 나온 문서가 없어요.",
         when,
+        f"- 공고로 이어질 가능성: {facts.conversion_prob:.0%} 정도로 봐요. 지금 단계와 의회 답변 수준, "
+        "같은 사업을 가리키는 문서 수로 매긴 추정치예요.",
     ]
-    if prob:
-        money.append(
-            f"- 공고로 이어질 가능성: {prob} 정도예요. 같은 종류의 첫 신호가 지난 데이터에서 실제 입찰까지 간 비율이에요."
-        )
-
-    if department:
+    if facts.department:
         meet = [f"- {who}. 문서에 담당으로 나온 부서라서 여기부터 연락해 보세요."]
     elif who:
         meet = [
@@ -258,10 +232,10 @@ def template_brief(facts: str) -> str:
         ]
     else:
         meet = ["- 수요 기관을 아직 특정하지 못했어요."]
-
-    past = [f"- {_dot(h['date'])} · {h['rest']}" for h in history] or [
-        "- 아직 모아 둔 발주 이력이 없어요."
-    ]
+    past = [
+        f"- {_dot(h.published_at)} · {h.title} ({format_krw(h.budget_krw) if h.budget_krw else '금액 미상'})"
+        for h in facts.history
+    ] or ["- 아직 모아 둔 발주 이력이 없어요."]
 
     return "\n".join(
         [
@@ -303,7 +277,7 @@ async def generate_brief(
         return existing
     opp = await session.get(Opportunity, opportunity_id)
     if opp is None:
-        raise LookupError("opportunity not found")
+        raise OpportunityNotFoundError(opportunity_id)
     if org.credit_balance < BRIEF_CREDIT_COST:
         raise InsufficientCreditsError(org.credit_balance, BRIEF_CREDIT_COST)
     facts = await build_facts(session, opp, org.id)

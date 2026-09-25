@@ -185,7 +185,10 @@ async def test_alert_lines_quote_speech_and_explain_budget_rows(demo_world) -> N
             func.bool_and(Signal.stage == "budget_line")
             & func.bool_or(Signal.budget_krw.is_not(None))
         )
-        with_council = stages.having(func.bool_or(Signal.stage == "council_mention"))
+        with_council = stages.having(
+            func.bool_or(Signal.stage == "council_mention")
+            & ~func.bool_or(Signal.stage == "budget_line")
+        )
         pairs = []
         for query in (budget_only, with_council):
             opp_id = await s.scalar(query.limit(1))
@@ -201,3 +204,6 @@ async def test_alert_lines_quote_speech_and_explain_budget_rows(demo_world) -> N
         and "편성돼 있어요" in budget_item["evidence_note"]
     )
     assert council_item["evidence"] and council_item["evidence_note"] is None
+    assert "\n" not in council_item["evidence"]
+    # a worker rolled back to the previous release reads item["window"]
+    assert budget_item["window"] and council_item["window"]

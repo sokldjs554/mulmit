@@ -133,6 +133,22 @@ def test_digests_queued_before_the_when_field_still_render() -> None:
     assert "입찰 예상 2026.07~2026.12" in render_slack(legacy)["blocks"][1]["text"]["text"]
 
 
+def test_old_window_labels_are_reworded_not_prefixed() -> None:
+    from app.notify.render import when
+
+    assert when({"window": "공고됨(2026.06.01)"}) == "2026.06.01 입찰공고"
+    assert when({"window": "미정"}) == "입찰 시기 미정"
+    assert when({"window": "2026.07~2026.12"}) == "입찰 예상 2026.07~2026.12"
+
+
+def test_every_channel_counts_the_whole_digest() -> None:
+    items = [{**PAYLOAD["items"][0], "opportunity_id": i} for i in range(12)]  # type: ignore[dict-item]
+    digest = {**PAYLOAD, "items": items, "more": 5, "feed_url": "https://app.example/app"}
+    texts = [b["text"]["text"] for b in render_slack(digest)["blocks"] if b["type"] == "section"]
+    assert texts[-1] == "<https://app.example/app|나머지 7건도 보기>"  # 2 cut by Slack + 5 left out
+    assert render_kakao_variables(digest)["#{건수}"] == "17"
+
+
 def test_test_notifications_say_what_they_are() -> None:
     note = {**PAYLOAD, "headline": "테스트 알림이에요", "items": []}
     assert "설정은 끝났어요" in render_email(note).text

@@ -21,7 +21,7 @@ from app.billing.ledger import InsufficientCreditsError
 from app.clock import today_kst
 from app.db.models import Brief, Opportunity, Recommendation
 from app.domain.stages import STAGE_LABEL, Stage
-from app.pipeline.brief import generate_brief
+from app.pipeline.brief import OpportunityNotFoundError, generate_brief
 
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
@@ -170,6 +170,6 @@ async def create_brief(
             status.HTTP_402_PAYMENT_REQUIRED,
             f"크레딧이 모자라요. 지금 {exc.balance}개 있고 {exc.needed}개가 필요해요",
         ) from exc
-    except LookupError as exc:
+    except OpportunityNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "이 사업을 찾을 수 없어요") from exc
     return BriefOut.model_validate(brief)

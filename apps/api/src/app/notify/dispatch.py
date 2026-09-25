@@ -36,6 +36,7 @@ from app.db.models import (
 )
 from app.domain.krw import format_krw
 from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage
+from app.domain.timing import month_span
 from app.log import get_logger
 from app.notify.channels import Channel, PermanentDeliveryError, TransientDeliveryError
 
@@ -47,39 +48,43 @@ def _when_label(opp: Opportunity) -> str:
     """The timing half of an alert line: when the tender came out, or when we expect it."""
     if opp.bid_published_at:
         return f"{opp.bid_published_at:%Y.%m.%d} 입찰공고"
-    start, end = opp.bid_window_start, opp.bid_window_end
-    if start is None:
+    if opp.bid_window_start is None:
         return "입찰 시기 미정"
-    if end is None or (start.year, start.month) == (end.year, end.month):
-        return f"입찰 예상 {start.year}년 {start.month}월"
-    if start.year == end.year:
-        return f"입찰 예상 {start.year}년 {start.month}~{end.month}월"
-    return f"입찰 예상 {start.year}년 {start.month}월~{end.year}년 {end.month}월"
+    return f"입찰 예상 {month_span(opp.bid_window_start, opp.bid_window_end)}"
+
+
+def _legacy_window(opp: Opportunity) -> str:
+    # Still written next to "when" so a rolled-back worker, which reads item["window"],
+    # can render digests queued by this version. Drop once no such rollback is possible.
+    if opp.bid_published_at:
+        return f"공고됨({opp.bid_published_at:%Y.%m.%d})"
+    if opp.bid_window_start and opp.bid_window_end:
+        return f"{opp.bid_window_start:%Y.%m}~{opp.bid_window_end:%Y.%m}"
+    return "미정"
 
 
 async def _best_evidence(session: AsyncSession, opp_id: int) -> tuple[str | None, str | None]:
-    """(quote, note) for an alert line. People read a council answer; a budget-book row
-    ("세부사업: …  197,000  0  197,000") means nothing out of its table, so it becomes a sentence."""
+    """(quote, note) from the latest early signal. A council answer is quoted; a budget-book
+    row ("세부사업: …  197,000  0  197,000") means nothing out of its table, so it becomes a
+    sentence instead."""
     rows = (
         await session.scalars(
             select(Signal)
             .join(OpportunitySignal, OpportunitySignal.signal_id == Signal.id)
             .where(OpportunitySignal.opportunity_id == opp_id)
+            .where(Signal.stage.in_(("council_mention", "budget_line")))
             .order_by(Signal.observed_at.desc())
         )
     ).all()
-    budget_row: Signal | None = None
     for s in rows:
-        if s.stage == "council_mention":
-            for ev in s.evidence:
-                if ev.get("found"):
-                    quote = str(ev.get("quote", ""))
-                    return quote[:140] + ("…" if len(quote) > 140 else ""), None
-        elif s.stage == "budget_line" and s.budget_krw and budget_row is None:
-            budget_row = s
-    if budget_row is not None and budget_row.budget_krw:
-        year = f"{budget_row.expected_year}년도 " if budget_row.expected_year else ""
-        return None, f"{year}예산서에 {format_krw(budget_row.budget_krw)}이 편성돼 있어요."
+        if s.stage == "budget_line":
+            if s.budget_krw:
+                return None, f"예산서에 {format_krw(s.budget_krw)}이 편성돼 있어요."
+            continue
+        for ev in s.evidence:
+            if ev.get("found"):
+                quote = " ".join(str(ev.get("quote", "")).split())
+                return quote[:140] + ("…" if len(quote) > 140 else ""), None
     return None, None
 
 
@@ -99,6 +104,7 @@ async def build_items(
                 "stage_label": STAGE_LABEL[Stage(opp.stage)],
                 "budget": format_krw(opp.est_budget_krw) if opp.est_budget_krw else None,
                 "when": _when_label(opp),
+                "window": _legacy_window(opp),
                 "score_pct": round(rec.score * 100),
                 "evidence": quote,
                 "evidence_note": note,

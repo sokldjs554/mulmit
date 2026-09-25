@@ -287,38 +287,50 @@ def test_heuristic_titles_read_like_project_names(answer: str, expected: str) ->
     assert _guess_title(answer, "") == expected
 
 
-def _brief_facts(stage: str, last_commitment: str, *, extra: tuple[str, ...] = ()) -> str:
-    return "\n".join(
-        [
-            "# 기회",
-            "- 사업명: 스마트쉘터 설치",
-            "- 기관: 서울특별시 강남구",
-            "- 부서: 교통행정과",
-            f"- 현재 단계: {stage} (공고 전)",
-            "- 추정 예산: 3억 5,000만원",
-            "- 입찰 예상 시기: 2026-09-01 ~ 2026-11-30",
-            *extra,
-            "- 공고 전환 확률(추정): 72%",
-            "",
-            "# 신호 (시간순, 원문 인용)",
-            "- 2025-11-20 [의회 발언] 스마트쉘터 설치, 금액 3억 5,000만원, 확약(반영·편성): "
-            "「내년도 본예산에 반영하겠습니다.」",
-            f"- 2026-03-02 [의회 발언] 스마트쉘터 설치, {last_commitment}: 「…」",
-            "",
-            "# 이 기관의 최근 발주 이력",
-            "- 2025-06-01 스마트폴 구축 (4억원)",
-        ]
+def _brief_facts(stage: str, last_commitment: str, **kw: Any) -> Any:
+    from app.domain.stages import Stage
+    from app.llm.prompts import BriefFacts, BriefSignal, PastTender
+
+    signal = BriefSignal(
+        date(2025, 11, 20),
+        Stage.COUNCIL,
+        "스마트쉘터 설치",
+        350_000_000,
+        "committed",
+        "내년도 본예산에 반영하겠습니다.",
     )
+    fields: dict[str, Any] = {
+        "today": date(2026, 3, 10),
+        "title": "스마트쉘터 설치",
+        "institution": "서울특별시 강남구",
+        "department": "교통행정과",
+        "stage": Stage(stage),
+        "status": "open",
+        "est_budget_krw": 350_000_000,
+        "window_start": date(2026, 9, 1),
+        "window_end": date(2026, 11, 30),
+        "bid_published_at": None,
+        "best_commitment": "committed",
+        "conversion_prob": 0.72,
+        "signals": (
+            signal,
+            BriefSignal(
+                date(2026, 3, 2), Stage.COUNCIL, "스마트쉘터 설치", None, last_commitment, "…"
+            ),
+        ),
+        "history": (PastTender(date(2025, 6, 1), "스마트폴 구축", 400_000_000),),
+    }
+    return BriefFacts(**(fields | kw))
 
 
 def test_template_brief_advice_follows_the_stage_reached() -> None:
     from app.pipeline.brief import template_brief
 
-    prespec = template_brief(_brief_facts("사전규격", "확약(반영·편성)"))
+    prespec = template_brief(_brief_facts("prespec", "committed"))
     assert "의견등록 기간" in prespec
     assert "예산에 편성되기 전" not in prespec
 
-    council = template_brief(_brief_facts("의회 발언", "검토 중"))
+    council = template_brief(_brief_facts("council_mention", "reviewing"))
     assert "예산에 편성되기 전" in council
     assert "가장 최근 발언이 확약은 아니었어요" in council
 
@@ -326,7 +338,7 @@ def test_template_brief_advice_follows_the_stage_reached() -> None:
 def test_template_brief_reads_like_a_person_wrote_it() -> None:
     from app.pipeline.brief import template_brief
 
-    brief = template_brief(_brief_facts("예산 편성", "확약(반영·편성)"))
+    brief = template_brief(_brief_facts("budget_line", "committed"))
     summary = brief.split("\n")[1]
     assert summary.startswith("서울특별시 강남구 교통행정과의 「스마트쉘터 설치」 건이에요.")
     assert "입찰은 2026년 9~11월쯤 나올 것으로 보고 있어요." in summary
@@ -341,6 +353,40 @@ def test_template_brief_reads_like_a_person_wrote_it() -> None:
     assert "2026-09-01" not in brief  # no raw ISO dates leak into the prose
 
     published = template_brief(
-        _brief_facts("입찰공고", "확약(반영·편성)", extra=("- 입찰공고일: 2026-06-01",))
+        _brief_facts("bid_notice", "committed", bid_published_at=date(2026, 6, 1))
     )
     assert "입찰공고는 2026.06.01에 나왔어요." in published
+
+
+def test_template_brief_does_not_forecast_a_window_that_has_passed() -> None:
+    from app.pipeline.brief import template_brief
+
+    stale = template_brief(_brief_facts("budget_line", "committed", today=date(2027, 1, 5)))
+    assert "예상했던 입찰 시기(2026년 9~11월)가 지났는데 아직 공고는 안 나왔어요." in stale
+    assert "나올 것으로 보고 있어요" not in stale
+
+
+def test_a_quote_that_spans_lines_keeps_its_signal() -> None:
+    from app.domain.stages import Stage
+    from app.llm.prompts import BriefSignal
+    from app.pipeline.brief import template_brief
+
+    weak = BriefSignal(
+        date(2026, 3, 2),
+        Stage.COUNCIL,
+        "스마트쉘터 설치",
+        None,
+        "reviewing",
+        "적극 검토하겠습니다.\n다만 예산이",
+    )
+    facts = _brief_facts("council_mention", "committed", signals=(weak,))
+    brief = template_brief(facts)
+    assert "- **2026.03.02 · 의회 발언** — 스마트쉘터 설치. '검토하겠다'는 정도였어요." in brief
+    assert "  > 「적극 검토하겠습니다. 다만 예산이」" in brief
+    assert "가장 최근 발언이 확약은 아니었어요" in brief
+    prompt = facts.as_prompt()
+    assert prompt.startswith("기준일: 2026-03-10")
+    assert (
+        "- 2026-03-02 [의회 발언] 스마트쉘터 설치, 검토 중: 「적극 검토하겠습니다. 다만 예산이」"
+        in prompt
+    )

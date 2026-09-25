@@ -31,7 +31,7 @@ const KIND = {
 } as const;
 
 const NOTE_KIND: Record<string, string> = { instant: "바로 알림", daily: "매일 요약", weekly: "주간 요약", test: "테스트" };
-const NOTE_STATUS: Record<string, string> = { sent: "보냄", failed: "실패", pending: "보내는 중" };
+const NOTE_STATUS: Record<string, string> = { sent: "보냄", failed: "실패", pending: "대기 중", skipped: "건너뜀" };
 
 const PLAN_CHANNELS: Record<string, Kind[]> = {
   free: ["email"],
@@ -141,9 +141,9 @@ function ChannelsCard({ plan }: { plan: string }) {
                     <div className="text-[12px] text-muted">
                       {meta.label}
                       {ch.last_error ? (
-                        <span className="text-critical" title={ch.last_error}>
-                          {" "}
-                          · 계속 보내지 못해서 꺼 뒀어요. 주소를 확인하고 테스트를 눌러 주세요.
+                        <span className="block text-critical">
+                          보낼 수 없어서 꺼 뒀어요. 주소를 확인하고 테스트를 눌러 주세요.
+                          <span className="block break-all text-muted">사유: {ch.last_error}</span>
                         </span>
                       ) : null}
                     </div>

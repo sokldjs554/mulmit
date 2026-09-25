@@ -159,7 +159,7 @@ function Credits({ billing }: { billing: Billing }) {
     <Card>
       <CardHeader
         title={`크레딧 ${billing.credit_balance}개`}
-        description={`영업 브리핑 한 건에 ${billing.brief_cost}크레딧이 들어요. 플랜으로 받은 크레딧은 달이 바뀌면 사라지고, 따로 산 크레딧은 계속 남아요.`}
+        description={`영업 브리핑 한 건에 ${billing.brief_cost}크레딧이 들어요. 플랜으로 받은 크레딧은 결제 주기가 끝나면 사라지고, 따로 산 크레딧은 계속 남아요.`}
         action={
           <div className="flex gap-2">
             {billing.credit_packs.map((p) => (

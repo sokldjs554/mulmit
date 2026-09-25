@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from datetime import date
 from xml.sax.saxutils import escape, quoteattr
 
+from app.domain.krw import format_krw
+from app.domain.stages import STAGE_LABEL, Stage
 from app.domain.taxonomy import CATEGORIES, Category
 
 EXTRACT_PROMPT_VERSION = "extract-v3"
@@ -131,3 +133,94 @@ and not bare noun fragments. Dates as 2026.03.02, amounts as 3억 5,000만원.
 
 Rules: use only the facts provided; when something is unknown say so; quote evidence in
 「」 when you rely on it; no marketing fluff; keep it under 450 Korean words."""
+
+
+COMMITMENT_KO = {
+    "committed": "확약(반영·편성)",
+    "planned": "추진 계획",
+    "reviewing": "검토 중",
+    "declined": "어렵다는 답변",
+}
+STATUS_KO = {"open": "공고 전", "bid_open": "입찰 진행", "closed": "종료", "dormant": "휴면"}
+
+
+@dataclass(frozen=True, slots=True)
+class BriefSignal:
+    observed_at: date
+    stage: Stage
+    title: str
+    budget_krw: int | None
+    commitment: str | None  # committed | planned | reviewing | declined
+    quote: str  # verbatim evidence; may span lines as the source did
+
+    @property
+    def one_line_quote(self) -> str:
+        return " ".join(self.quote.split())
+
+
+@dataclass(frozen=True, slots=True)
+class PastTender:
+    published_at: date
+    title: str
+    budget_krw: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class BriefFacts:
+    """Everything a brief may say, assembled by code. The model gets it as text
+    (:meth:`as_prompt`); the template brief reads the fields directly."""
+
+    today: date
+    title: str
+    institution: str | None
+    department: str | None
+    stage: Stage
+    status: str
+    est_budget_krw: int | None
+    window_start: date | None
+    window_end: date | None
+    bid_published_at: date | None
+    best_commitment: str | None
+    conversion_prob: float
+    signals: tuple[BriefSignal, ...] = ()
+    history: tuple[PastTender, ...] = ()
+    profile: tuple[str, ...] = ()  # "- 소개: …" lines; empty when the org has no profile
+
+    def as_prompt(self) -> str:
+        window = (
+            f"{self.window_start} ~ {self.window_end or self.window_start}"
+            if self.window_start
+            else "미정"
+        )
+        lines = [
+            f"기준일: {self.today}",
+            "",
+            "# 기회",
+            f"- 사업명: {self.title}",
+            f"- 기관: {self.institution or '미상'}",
+            *([f"- 부서: {self.department}"] if self.department else []),
+            f"- 현재 단계: {STAGE_LABEL[self.stage]} ({STATUS_KO.get(self.status, self.status)})",
+            f"- 추정 예산: {format_krw(self.est_budget_krw) if self.est_budget_krw else '미상'}",
+            f"- 입찰 예상 시기: {window}",
+            *([f"- 입찰공고일: {self.bid_published_at}"] if self.bid_published_at else []),
+            f"- 가장 강한 의지 표현: {COMMITMENT_KO.get(self.best_commitment or '', '없음')}",
+            f"- 공고 전환 확률(추정): {self.conversion_prob:.0%}",
+            "",
+            "# 신호 (시간순, 원문 인용)",
+        ]
+        for s in self.signals:
+            budget = f", 금액 {format_krw(s.budget_krw)}" if s.budget_krw else ""
+            said = COMMITMENT_KO.get(s.commitment or "", "의지 표현 없음")
+            lines.append(
+                f"- {s.observed_at} [{STAGE_LABEL[s.stage]}] {s.title}{budget}, {said}: "
+                f"「{s.one_line_quote}」"
+            )
+        lines += ["", "# 이 기관의 최근 발주 이력"]
+        lines += [
+            f"- {h.published_at} {h.title} "
+            f"({format_krw(h.budget_krw) if h.budget_krw else '금액 미상'})"
+            for h in self.history
+        ] or ["- (수집된 이력 없음)"]
+        if self.profile:
+            lines += ["", "# 우리 회사 프로필", *self.profile]
+        return "\n".join(lines)
