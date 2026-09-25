@@ -7,7 +7,8 @@
 | `g2b_order_plan` | 조달청 발주계획현황서비스 | 발주계획 | 매시 7분 | `sources/g2b.py` |
 | `g2b_prespec` | 조달청 사전규격정보서비스 | 사전규격 | 매시 7분 | `sources/g2b.py` |
 | `g2b_bid` | 조달청 입찰공고정보서비스 | 입찰공고 | 매시 7분 | `sources/g2b.py` |
-| `fixture_*` | 합성 세계 (`demo/synth.py`) | 위 다섯 가지 | 수동/데모 | `sources/registry.py` |
+| (기관별 설정) | 지자체 누리집 "예산 공개"·"고시·공고" 게시판 | 예산서·사업설명서 첨부(HWP·PDF) | 수집원 설정 | `sources/crawler.py` |
+| `fixture_*` | 합성 세계 (`demo/synth.py`) — 예산서는 합성 누리집을 **크롤링**해서 수집 | 위 여섯 가지 | 수동/데모 | `sources/registry.py`, `demo/sites.py` |
 
 ## 검증 상태 — 먼저 읽어 주세요
 
@@ -43,6 +44,29 @@ WHERE key = 'clik_minutes';
 
 - 참조번호(`orderPlanUntyNo`, `bfSpecRgstNo`, 공고번호)가 있으면 **유사도보다 먼저** 그 번호로 기회를 잇습니다.
 - 조달청 기관코드는 우리 기관 사전의 코드와 체계가 달라 이름으로 해석합니다. "중구청"처럼 광역시가 빠진 이름은 모호로 처리해 검토 대기열로 보냅니다.
+
+## 게시판 크롤러
+
+API가 없는 기관 누리집 게시판은 범용 크롤러가 목록 → 상세 → 첨부 순으로 따라갑니다([ADR-0009](adr/0009-polite-board-crawler.md)). 기관 추가는 설정만으로 합니다.
+
+```json
+{"boards": [{"url": "https://www.example.go.kr/board/B_000052/list.do",
+             "institution_code": "LG-11680", "publisher": "서울특별시 강남구"}],
+ "doc_type": "budget_book", "title_keywords": ["예산서", "사업명세서"],
+ "detail_pattern": "view\\.do", "attachment_pattern": "download|fileDown|atchFile",
+ "id_param": "nttId", "page_param": "pageIndex", "max_pages": 20,
+ "delay_seconds": 1.0, "max_file_mb": 50}
+```
+
+| 지키는 것 | 방법 |
+|---|---|
+| robots.txt | 호스트마다 한 번 받아 따름. 4xx면 규칙 없음, 5xx·접속 불가면 이번 실행에서 그 호스트 전체 금지 (RFC 9309) |
+| 요청 속도 | `<수집원>@<호스트>` 공유 토큰 버킷 + 호스트별 최소 간격 |
+| 증분 | 최신순 목록에서 가장 오래된 글이 수집 창보다 이전이면 페이지 이동 중단 |
+| 파일 | 스트리밍 중 크기 상한 초과 시 중단, 형식은 앞부분 바이트로 판별(PDF·HWP5·HWPX), 이미지·오류 페이지는 버림 |
+| 같은 글 | 세션·메뉴 파라미터를 뺀 정규 URL과 게시글 ID로 식별 |
+
+데모에서는 기관마다 `*.gov.example` 합성 누리집이 있고(robots.txt 금지 경로, 예산과 무관한 공지, 이미지 첨부, `application/octet-stream` 다운로드 포함), 크롤러가 여기서 예산서 25건을 모두 원본과 동일하게 수집합니다.
 
 ## 원문 파일
 

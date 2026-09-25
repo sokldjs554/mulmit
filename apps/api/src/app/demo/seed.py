@@ -102,7 +102,13 @@ async def seed_sources(
         stmt = insert(Source).values(**entry, enabled=True, config=config)
         await session.execute(
             stmt.on_conflict_do_update(
-                index_elements=["key"], set_={"config": config, "enabled": True}
+                index_elements=["key"],
+                set_={
+                    "config": config,
+                    "enabled": True,
+                    "adapter": entry["adapter"],
+                    "name": entry["name"],
+                },
             )
         )
 
@@ -224,7 +230,7 @@ class DemoReport:
 
 async def run_demo_pipeline(session: AsyncSession, runtime: Runtime, *, anchor: date) -> DemoReport:
     report = DemoReport()
-    sources = (await session.scalars(select(Source).where(Source.adapter == "fixture"))).all()
+    sources = (await session.scalars(select(Source).where(Source.key.like("fixture_%")))).all()
     window = FetchWindow(anchor - timedelta(days=365 * 4), anchor)
     doc_ids: list[int] = []
     for src in sources:

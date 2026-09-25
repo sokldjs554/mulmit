@@ -41,7 +41,15 @@ _DGK_FATAL_CODES = {"10", "11", "12", "20", "30", "31", "32", "33"}  # params / 
 
 
 class FatalSourceError(Exception):
-    """Misconfiguration (bad key, bad parameter). Retrying will not help."""
+    """Misconfiguration (bad key, bad parameter) or a 4xx. Retrying will not help."""
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+class ResponseTooLargeError(Exception):
+    """The body exceeded the caller's size cap; nothing past the cap was buffered."""
 
 
 class TransientSourceError(Exception):
@@ -131,6 +139,7 @@ class ResilientClient:
         *,
         params: Mapping[str, Any] | None = None,
         soft_errors: bool = True,
+        max_bytes: int | None = None,
     ) -> httpx.Response:
         last_exc: Exception | None = None
         for attempt in range(self._max_attempts):
@@ -138,13 +147,19 @@ class ResilientClient:
             await self._limiter.acquire(self.source)
             retry_after: str | None = None
             try:
-                resp = await self._client.request(method, url, params=params)
+                if max_bytes is None:
+                    resp = await self._client.request(method, url, params=params)
+                else:
+                    resp = await self._read_capped(method, url, params, max_bytes)
                 if resp.status_code in RETRYABLE_STATUS:
                     retry_after = resp.headers.get("Retry-After")
                     raise TransientSourceError(f"{self.source}: HTTP {resp.status_code}")
                 if resp.status_code >= 400:
                     await self._breaker.record_success(self.source)  # provider is up; we're wrong
-                    raise FatalSourceError(f"{self.source}: HTTP {resp.status_code} for {url}")
+                    raise FatalSourceError(
+                        f"{self.source}: HTTP {resp.status_code} for {url}",
+                        status=resp.status_code,
+                    )
                 # Error envelopes are small; don't re-parse multi-MB data pages to look for one.
                 if soft_errors and (
                     len(resp.content) < 65_536 or resp.content.lstrip()[:1] == b"<"
@@ -152,7 +167,7 @@ class ResilientClient:
                     _classify_soft_error(self.source, resp.text)
                 await self._breaker.record_success(self.source)
                 return resp
-            except (QuotaExhaustedError, FatalSourceError):
+            except (QuotaExhaustedError, FatalSourceError, ResponseTooLargeError):
                 raise
             except (httpx.TimeoutException, httpx.TransportError, TransientSourceError) as exc:
                 last_exc = exc
@@ -172,6 +187,30 @@ class ResilientClient:
         raise TransientSourceError(
             f"{self.source}: gave up after {self._max_attempts} attempts: {last_exc}"
         ) from last_exc
+
+    async def _read_capped(
+        self, method: str, url: str, params: Mapping[str, Any] | None, max_bytes: int
+    ) -> httpx.Response:
+        """Stream the body and stop at ``max_bytes`` (a declared Content-Length is checked first),
+        so a mislabelled multi-GB attachment can't exhaust worker memory."""
+        req = self._client.build_request(method, url, params=params)
+        resp = await self._client.send(req, stream=True)
+        try:
+            declared = resp.headers.get("Content-Length")
+            if declared and declared.isdigit() and int(declared) > max_bytes:
+                raise ResponseTooLargeError(f"{url}: {declared} bytes > {max_bytes}")
+            chunks: list[bytes] = []
+            size = 0
+            async for chunk in resp.aiter_bytes():
+                size += len(chunk)
+                if size > max_bytes:
+                    raise ResponseTooLargeError(f"{url}: more than {max_bytes} bytes")
+                chunks.append(chunk)
+        finally:
+            await resp.aclose()
+        return httpx.Response(
+            resp.status_code, headers=resp.headers, content=b"".join(chunks), request=req
+        )
 
     async def get_json(self, url: str, *, params: Mapping[str, Any] | None = None) -> Any:
         resp = await self.request("GET", url, params=params)
