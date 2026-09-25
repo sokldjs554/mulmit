@@ -278,6 +278,7 @@ def _extract_budget_line(ctx: ChunkContext, table_unit: int) -> list[ExtractedSi
 class HeuristicProvider:
     name = "heuristic"
     extract_model = HEURISTIC_VERSION
+    extract_effort: str | None = None
     brief_model = HEURISTIC_VERSION
 
     def __init__(self, table_unit_default: int = 1000) -> None:

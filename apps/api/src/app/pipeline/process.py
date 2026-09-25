@@ -16,7 +16,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Document, DocumentChunk, ReviewItem, Signal
-from app.domain.grounding import verify_extraction
+from app.domain.grounding import GroundingReport, verify_extraction
 from app.domain.krw import detect_table_unit
 from app.domain.stages import Stage
 from app.domain.synonyms import canonicalize
@@ -148,6 +148,46 @@ def _structured_signal(runtime: Runtime, doc: Document) -> dict[str, Any]:
     }
 
 
+@dataclass(slots=True)
+class CheckedSignal:
+    """A model's signal after the grounding verifier — what the pipeline actually stores."""
+
+    budget_krw: int | None
+    expected_year: int | None
+    report: GroundingReport
+
+
+def check_signal(
+    sig: ExtractedSignal,
+    *,
+    text: str,
+    doc_type: str,
+    reference_date: date,
+    fiscal_year: int | None,
+    table_unit: int,
+    min_score: float,
+) -> CheckedSignal:
+    expected_year = sig.expected_year
+    if doc_type == "budget_book" and fiscal_year:
+        expected_year = expected_year or fiscal_year
+    report = verify_extraction(
+        source=text,
+        evidence_quotes=sig.evidence,
+        budget_krw=sig.budget_krw,
+        budget_text=sig.budget_text,
+        expected_year=expected_year if doc_type != "budget_book" else None,
+        timing_text=sig.timing_text,
+        reference_date=reference_date,
+        confidence=sig.confidence,
+        min_score=min_score,
+        default_unit=table_unit if doc_type == "budget_book" else 1,
+    )
+    budget = sig.budget_krw
+    if report.budget_grounded is False and report.budget_parsed:
+        budget = report.budget_parsed  # the parser, not the model, has the last word on numbers
+    return CheckedSignal(budget, expected_year, report)
+
+
 def _text_signal(
     runtime: Runtime,
     doc: Document,
@@ -160,21 +200,16 @@ def _text_signal(
     table_unit: int,
 ) -> dict[str, Any]:
     observed = _observed_at(doc)
-    expected_year = sig.expected_year
-    if doc.doc_type == "budget_book" and fiscal_year:
-        expected_year = expected_year or fiscal_year
-    report = verify_extraction(
-        source=chunk.text,
-        evidence_quotes=sig.evidence,
-        budget_krw=sig.budget_krw,
-        budget_text=sig.budget_text,
-        expected_year=expected_year if doc.doc_type != "budget_book" else None,
-        timing_text=sig.timing_text,
+    checked = check_signal(
+        sig,
+        text=chunk.text,
+        doc_type=doc.doc_type,
         reference_date=observed,
-        confidence=sig.confidence,
+        fiscal_year=fiscal_year,
+        table_unit=table_unit,
         min_score=runtime.settings.grounding_min_score,
-        default_unit=table_unit if doc.doc_type == "budget_book" else 1,
     )
+    report = checked.report
     owner = _demand_owner(runtime, doc)
     if sig.institution_mention and doc.doc_type == "council_minutes":
         mentioned = runtime.registry.resolve(sig.institution_mention)
@@ -199,9 +234,6 @@ def _text_signal(
         }
         for e in report.evidence
     ]
-    budget = sig.budget_krw
-    if report.budget_grounded is False and report.budget_parsed:
-        budget = report.budget_parsed  # the parser, not the model, has the last word on numbers
     return {
         "stage": _STAGE_BY_DOC[doc.doc_type].value,
         "institution_code": owner,
@@ -211,8 +243,8 @@ def _text_signal(
         "summary": sig.summary,
         "category": sig.category.value if isinstance(sig.category, Category) else str(sig.category),
         "keywords": sig.keywords,
-        "budget_krw": budget,
-        "expected_year": expected_year,
+        "budget_krw": checked.budget_krw,
+        "expected_year": checked.expected_year,
         "expected_half": sig.expected_half,
         "commitment": sig.commitment,
         "procurement_type": sig.procurement_type,

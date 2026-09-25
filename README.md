@@ -71,7 +71,7 @@
 | 작업 큐(Redis)와 cron 잡 위에서 도는 대용량 배치 파이프라인 설계·개선 | arq 워커 + KST cron(매시 조달, 매일 회의록, 매주 예산서, 10분 스윕, 아침 요약), 작업 ID 중복 제거, 한도 초과·서킷·일시 오류별 재시도, 종료 신호 시 재시도로 기록, 실행 이력 `job_runs` | [`worker/`](apps/api/src/app/worker), [ADR-0003](docs/adr/0003-arq-and-in-worker-cron.md) |
 | PostgreSQL 스키마 설계와 마이그레이션, 대용량 데이터 환경에서의 쿼리 최적화 | 24개 테이블, Alembic 비동기 마이그레이션. 공고 10만·신호 40만 건 벤치로 찾은 문제를 마이그레이션 0002로 해결: 벡터 후보 **13건·재현율 4% → 300건·100%**, 참조번호 조회 **87ms → 0.02ms**, 운영 집계 173 → 124ms. 인덱스는 `CONCURRENTLY` | [`migrations/`](apps/api/migrations), [performance.md](docs/performance.md), [ADR-0010](docs/adr/0010-measure-at-volume.md) |
 | Next.js·TypeScript 기반 사용자 웹과 운영자 콘솔(admin) 화면 개발 | 고객 앱(피드·기회 상세·프로필·알림·요금) + 운영 콘솔(개요·수집원·작업 로그·검토 대기열·LLM 비용·평가) | [`apps/web`](apps/web) |
-| LLM 파이프라인 개선 (프롬프트 설계, 구조화 출력, 결과 검증, 품질 평가, 비용 최적화) | 구조화 출력(엄격 JSON 스키마), 프롬프트 캐싱, effort 조절, 원문 근거 검증기, 합성 정답·수기 세트 평가, 트리아지(청크 59% LLM 생략)·해시 캐시·일일 예산 가드 | [`llm/`](apps/api/src/app/llm), [`grounding.py`](apps/api/src/app/domain/grounding.py), [ADR-0002](docs/adr/0002-grounded-extraction.md), [ADR-0006](docs/adr/0006-one-model-low-effort.md) |
+| LLM 파이프라인 개선 (프롬프트 설계, 구조화 출력, 결과 검증, 품질 평가, 비용 최적화) | 구조화 출력(엄격 JSON 스키마), 프롬프트 캐싱, effort 조절, 원문 근거 검증기, 합성 정답·수기 세트(54건) 평가, 모델·effort별 정확도·비용·지연 비교(`manage eval llm`, 사용액 상한), 트리아지(청크 59% LLM 생략)·해시 캐시·일일 예산 가드 | [`llm/`](apps/api/src/app/llm), [`grounding.py`](apps/api/src/app/domain/grounding.py), [`eval/`](apps/api/src/app/eval), [ADR-0002](docs/adr/0002-grounded-extraction.md), [ADR-0006](docs/adr/0006-one-model-low-effort.md) |
 | 비정형 문서 파싱과 OCR 파이프라인 정확도 개선 | PDF 페이지별 텍스트층 판정 → 부족한 페이지만 OCR(tesseract `kor+eng`) + 후보정(문자 오류율 1.13% → 0.99%, 금액 100%), HWP5 레코드 파서, HWPX | [`parsing/`](apps/api/src/app/parsing) |
 | 멀티채널 알림 발송(이메일·메신저)과 구독·크레딧 결제 도메인 개발 | 이메일·Slack·카카오 알림톡, 중복 방지·방해 금지 시간. 토스 정기결제(빌링키 암호화, 멱등 결제, 웹훅 대사, 1·3·7일 재시도) + 추가 전용 크레딧 원장 | [`notify/`](apps/api/src/app/notify), [`billing/`](apps/api/src/app/billing), [ADR-0005](docs/adr/0005-credit-ledger.md) |
 | 클라우드 컨테이너 서비스 배포·운영과 로깅·에러 트래킹 기반 장애 대응 | Docker 이미지 2개, GCP Cloud Run(API 내부 전용·워커 헬스체크)·Cloud SQL·Memorystore Terraform, 키 없는 배포(WIF), structlog JSON, Sentry, 런북 | [`infra/`](infra/terraform), [배포 워크플로](.github/workflows/deploy.yml), [런북](docs/runbook.md) |
@@ -149,13 +149,14 @@ flowchart LR
 | 트리아지 | LLM 없이 건너뛴 청크 / 그 상태의 정답 재현율 | 59.4% / 99.1% |
 | 연결 | 쌍 정밀도 / 재현율 | 100% / 100% |
 | OCR (스캔 예산서) | 문자 오류율 원본 → 보정 / 금액 토큰 정확도 | 1.13% → 0.99% / 100% |
-| **수기 세트** | 정밀도 / 재현율 (규칙 기반) | **88.9% / 61.5%** |
+| **수기 세트** (54건, 신호 없는 사례 10건) | 정밀도 / 재현율 (규칙 기반) | **92.0% / 46.0%** |
 | 백테스트 | 공고 이전에 공개 신호가 있던 입찰 | 48건 중 75% |
 | | 첫 공개 신호 → 입찰공고 선행 기간 중앙값 | 308일 |
 | | 의회 발언 강도별 입찰 전환율: 확약 / 검토 | 88.2% / 20.0% |
 
-- 합성 세계 점수는 **파이프라인이 설계대로 동작한다는 증거일 뿐 실제 정확도가 아닙니다.** 같은 사람이 만든 생성기와 추출기는 같은 가정을 공유합니다. 수기 세트의 재현율 61.5%가 규칙 기반 추출기의 실제 한계에 더 가깝고, LLM 경로가 메워야 할 간격입니다.
+- 합성 세계 점수는 **파이프라인이 설계대로 동작한다는 증거일 뿐 실제 정확도가 아닙니다.** 같은 사람이 만든 생성기와 추출기는 같은 가정을 공유합니다. 수기 세트의 재현율 46.0%가 규칙 기반 추출기의 실제 한계에 더 가깝고, LLM 경로가 메워야 할 간격입니다.
 - 전체 리포트: [docs/evaluation.md](docs/evaluation.md) (`make eval`로 재생성).
+- **Claude 모델 비교**: `make eval-llm`이 같은 수기 세트를 규칙 기반·Opus 5(low·medium)·Sonnet 5(low)·Haiku 4.5로 돌려 정밀도·재현율·필드 정확도(검증기 통과 후), 검증기가 버리거나 고친 신호 수, 건당·1,000건당 비용, 지연 p50/p95를 [docs/evaluation-llm.md](docs/evaluation-llm.md)에 씁니다. API 키가 필요하고 한 번에 약 5달러이며(`--dry-run`으로 먼저 추정), `--max-usd`를 넘으면 호출을 멈춥니다.
 
 ## 대용량 쿼리
 
@@ -208,6 +209,7 @@ make worker         # arq 워커 + cron
 make web            # :3000
 make lint test eval
 make bench         # 대용량 쿼리 실행 계획 비교 (몇 분)
+make eval-llm      # Claude 모델·effort 비교 (API 키 필요, 약 5달러)
 ```
 
 ### 데모 계정
@@ -247,7 +249,7 @@ docs/                 조사, ADR, 아키텍처, 평가, 데이터 소스, 런�
 솔직하게 적습니다.
 
 - **실제 공공 API와 기관 누리집은 호출해 보지 못했습니다.** 개발 환경의 네트워크 정책으로 `clik.nanet.go.kr`·`data.go.kr`·`lofin.mois.go.kr`에 접속할 수 없어, 경로·필드는 공개 명세와 공개 저장소를 근거로 작성하고 계약 픽스처로만 검증했습니다. 크롤러도 합성 누리집에서만 검증했습니다. 어긋나는 부분은 설정(`sources.config`)으로 코드 수정 없이 고칠 수 있습니다.
-- **Claude 경로의 품질은 아직 측정 전입니다.** 요청 형태·오류 매핑·폴백은 테스트했지만, 실제 API로 수기 세트를 돌린 수치는 없습니다. 다음 단계는 같은 평가 러너로 규칙 기반 대비 개선을 재는 것입니다.
+- **Claude 경로의 품질은 아직 측정 전입니다.** 요청 형태·오류 매핑·폴백은 테스트했고, 실측 도구(`make eval-llm`)와 54건 수기 세트를 준비했지만 이 저장소의 수치는 아직 규칙 기반 추출기 것뿐입니다.
 - **대용량 벤치는 합성 데이터입니다.** 주제별로 뭉친 벡터와 균등한 기관 분포는 실제와 다릅니다. 실데이터가 쌓이면 `pg_stat_statements` 상위 쿼리로 다시 측정해야 합니다.
 - **인프라는 검증까지만 했습니다.** Terraform은 `validate`를 통과했고 CI가 이미지를 빌드하지만, 실제 GCP 프로젝트에 적용하지는 않았습니다.
 - **법·약관 검토 필요**: 공공누리 유형, 회의록 발언자 실명 표시 범위, 자동결제 약관.

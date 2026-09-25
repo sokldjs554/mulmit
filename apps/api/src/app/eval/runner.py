@@ -17,11 +17,8 @@ Four evaluations, each answering one question an engineer would ask before shipp
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from dataclasses import dataclass
-from datetime import date
-from importlib import resources
 from itertools import combinations
 from pathlib import Path
 from typing import Any
@@ -33,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Document, DocumentChunk, EvalRun, OpportunitySignal, Signal, Source
 from app.domain.grounding import locate_quote
 from app.domain.krw import amounts_agree
-from app.llm.prompts import ChunkContext
+from app.eval.realistic import Prediction, Tally, context_for, load_realistic, verify
 from app.runtime import Runtime
 from app.sources.registry import FixtureAdapter
 
@@ -264,85 +261,27 @@ async def eval_ocr(world: Any, runtime: Runtime, limit: int = 12) -> dict[str, A
     }
 
 
-def load_realistic() -> list[dict[str, Any]]:
-    text = (
-        resources.files("app.eval").joinpath("golden/realistic.jsonl").read_text(encoding="utf-8")
-    )
-    return [json.loads(line) for line in text.splitlines() if line.strip()]
-
-
 async def eval_realistic(session: AsyncSession, runtime: Runtime) -> dict[str, Any]:
     cases = load_realistic()
-    expected_total = predicted_total = matched = 0
-    field_ok = {"category": 0, "commitment": 0, "budget": 0, "expected_year": 0}
-    failures: list[dict[str, Any]] = []
+    raw, stored = Tally(), Tally()
+    rejected = 0
     for case in cases:
-        ctx = ChunkContext(
-            doc_type=case["doc_type"],
-            title=case["id"],
-            institution=case.get("institution"),
-            document_date=date.fromisoformat(case["date"]),
-            labels=case.get("labels", []),
-            text=case["text"],
-            fiscal_year=case.get("fiscal_year"),
-        )
-        attempt = await runtime.llm.extract(session, ctx)
-        preds = list(attempt.output.signals)
-        expected = case["expected"]
-        expected_total += len(expected)
-        predicted_total += len(preds)
-        used: set[int] = set()
-        for exp in expected:
-            hit = next(
-                (
-                    i
-                    for i, p in enumerate(preds)
-                    if i not in used
-                    and any(
-                        k.replace(" ", "") in (p.title + " ".join(p.keywords)).replace(" ", "")
-                        for k in exp["title_keywords"]
-                    )
-                ),
-                None,
-            )
-            if hit is None:
-                failures.append({"case": case["id"], "missing": exp["title_keywords"][0]})
-                continue
-            used.add(hit)
-            matched += 1
-            p = preds[hit]
-            field_ok["category"] += p.category.value == exp["category"]
-            field_ok["commitment"] += p.commitment == exp["commitment"]
-            field_ok["expected_year"] += p.expected_year == exp["expected_year"]
-            b_ok = (exp["budget_krw"] is None and p.budget_krw is None) or (
-                exp["budget_krw"] is not None
-                and p.budget_krw is not None
-                and amounts_agree(exp["budget_krw"], p.budget_krw, tolerance=0.02)
-            )
-            field_ok["budget"] += b_ok
-            if not b_ok or p.commitment != exp["commitment"]:
-                failures.append(
-                    {
-                        "case": case["id"],
-                        "title": p.title,
-                        "budget": p.budget_krw,
-                        "expected_budget": exp["budget_krw"],
-                        "commitment": p.commitment,
-                        "expected_commitment": exp["commitment"],
-                    }
-                )
-        for i, p in enumerate(preds):
-            if i not in used:
-                failures.append({"case": case["id"], "unexpected": p.title})
+        attempt = await runtime.llm.extract(session, context_for(case))
+        raw.add(case, [Prediction.of(s) for s in attempt.output.signals])
+        kept: list[Prediction] = []
+        for sig in attempt.output.signals:
+            checked = verify(case, sig, min_score=runtime.settings.grounding_min_score)
+            if checked.report.verdict == "rejected":
+                rejected += 1
+            else:
+                kept.append(Prediction.of(sig, checked))
+        stored.add(case, kept)
     return {
         "cases": len(cases),
         "extractor": runtime.llm.primary.extract_model if runtime.llm.primary else "heuristic-v2",
-        "expected": expected_total,
-        "predicted": predicted_total,
-        "precision": _ratio(matched, predicted_total),
-        "recall": _ratio(matched, expected_total),
-        "field_accuracy": {k: _ratio(v, matched) for k, v in field_ok.items()},
-        "failures": failures[:20],
+        **raw.summary(),
+        "after_verifier": stored.summary() | {"rejected": rejected},
+        "failures": raw.failures[:20],
     }
 
 
@@ -398,6 +337,7 @@ def _pct(v: Any) -> str:
 
 def render_report(r: dict[str, Any]) -> str:
     e, lk, o, rl = r["extraction"], r["linking"], r["ocr"], r["realistic"]
+    av = rl["after_verifier"]
     bt = r.get("backtest", {})
     c = r.get("conditions", {})
     lines = [
@@ -424,9 +364,13 @@ def render_report(r: dict[str, Any]) -> str:
         f"- 문서 {o.get('scanned_documents')}건 · CER {o.get('cer_raw')} → 보정 후 {o.get('cer_corrected')}",
         f"- 금액 토큰 정확도 {_pct(o.get('amount_token_accuracy_raw'))} → {_pct(o.get('amount_token_accuracy_corrected'))}",
         "",
-        f"## 수기 작성 세트 (extractor: {rl['extractor']})",
+        f"## 수기 작성 세트 (extractor: {rl['extractor']}, {rl['cases']}건)",
         f"- 정밀도 {_pct(rl['precision'])} · 재현율 {_pct(rl['recall'])} (기대 {rl['expected']}건, 예측 {rl['predicted']}건)",
         "- 필드 정확도: " + ", ".join(f"{k} {_pct(v)}" for k, v in rl["field_accuracy"].items()),
+        f"- 검증기 통과 후(저장되는 값): 정밀도 {_pct(av['precision'])} · 재현율 {_pct(av['recall'])} · "
+        + ", ".join(f"{k} {_pct(v)}" for k, v in av["field_accuracy"].items())
+        + f" · 근거를 찾지 못해 버린 신호 {av['rejected']}건",
+        "- 모델별 비교는 `manage eval llm` → [evaluation-llm.md](evaluation-llm.md)",
         "",
     ]
     if bt:

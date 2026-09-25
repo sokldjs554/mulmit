@@ -58,6 +58,16 @@ def _usage(resp: Any) -> Usage:
     )
 
 
+def _output_config(effort: str | None, fmt: dict[str, Any] | None) -> dict[str, Any]:
+    # effort=None leaves the model's default: some models (e.g. Haiku 4.5) take no effort knob.
+    config: dict[str, Any] = {}
+    if effort is not None:
+        config["effort"] = effort
+    if fmt is not None:
+        config["format"] = fmt
+    return config
+
+
 def _text(resp: Any) -> str:
     return "".join(block.text for block in resp.content if block.type == "text")
 
@@ -70,9 +80,9 @@ class AnthropicProvider:
         *,
         api_key: str | None,
         extract_model: str,
-        extract_effort: str,
+        extract_effort: str | None,
         brief_model: str,
-        brief_effort: str,
+        brief_effort: str | None,
         timeout: float = 90.0,
         max_retries: int = 2,
         prompt_cache: bool = True,
@@ -84,7 +94,7 @@ class AnthropicProvider:
             api_key=api_key, timeout=timeout, max_retries=max_retries
         )
         self.extract_model = extract_model
-        self._extract_effort = extract_effort
+        self.extract_effort = extract_effort
         self.brief_model = brief_model
         self._brief_effort = brief_effort
         self._prompt_cache = prompt_cache
@@ -116,6 +126,9 @@ class AnthropicProvider:
             raise LLMConfigError(f"anthropic {exc.status_code}: {exc}") from exc
         except (anthropic.APITimeoutError, anthropic.APIConnectionError) as exc:
             raise LLMUnavailableError(f"anthropic connection: {exc}") from exc
+        except TypeError as exc:
+            # The SDK only finds out at request time that no key or credentials were configured.
+            raise LLMConfigError(f"anthropic client not configured: {exc}") from exc
 
     async def extract(self, ctx: ChunkContext) -> LLMResult[ExtractionOutput]:
         started = time.perf_counter()
@@ -124,10 +137,9 @@ class AnthropicProvider:
             max_tokens=8000,
             system=self._system(EXTRACT_SYSTEM),
             messages=[{"role": "user", "content": extract_user_message(ctx)}],
-            output_config={
-                "effort": self._extract_effort,
-                "format": {"type": "json_schema", "schema": _EXTRACTION_SCHEMA},
-            },
+            output_config=_output_config(
+                self.extract_effort, {"type": "json_schema", "schema": _EXTRACTION_SCHEMA}
+            ),
         )
         latency = int((time.perf_counter() - started) * 1000)
         if resp.stop_reason == "refusal":
@@ -150,13 +162,14 @@ class AnthropicProvider:
         )
 
     async def brief(self, facts: str) -> LLMResult[str]:
+        config = _output_config(self._brief_effort, None)
         started = time.perf_counter()
         resp = await self._create(
             model=self.brief_model,
             max_tokens=6000,
             system=self._system(BRIEF_SYSTEM),
             messages=[{"role": "user", "content": facts}],
-            output_config={"effort": self._brief_effort},
+            **({"output_config": config} if config else {}),
         )
         latency = int((time.perf_counter() - started) * 1000)
         if resp.stop_reason == "refusal":

@@ -58,6 +58,10 @@ test: ## API tests (needs `make infra`) and web unit tests
 eval: ## Evaluate extraction/linking/OCR against ground truth and write docs/evaluation.md
 	cd $(API) && uv run manage eval all --record --report ../../docs/evaluation.md
 
+.PHONY: eval-llm
+eval-llm: ## Compare Claude models/efforts on the hand-written set (needs ANTHROPIC_API_KEY, ~$5; see --dry-run)
+	mkdir -p .data && cd $(API) && uv run manage eval llm --report ../../docs/evaluation-llm.md > ../../.data/eval-llm.json
+
 .PHONY: bench
 bench: ## Hot-query plans at production-like volume → docs/performance.md (few minutes)
 	cd $(API) && uv run manage bench --report ../../docs/performance.md

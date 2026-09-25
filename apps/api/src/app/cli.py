@@ -4,6 +4,7 @@ manage db upgrade                 # alembic upgrade head
 manage seed [--anchor 2026-09-25] # institutions, sources, demo tenants
 manage demo run                   # full pipeline over the synthetic world, in-process
 manage eval all --record          # extraction / linking / OCR / realistic-set evals
+manage eval llm --dry-run         # Claude model × effort comparison on the hand-written set
 manage bench --report ../../docs/performance.md   # hot-query plans at volume
 manage worker                     # arq worker + cron (+ /healthz on $PORT for Cloud Run)
 manage openapi > openapi.json     # schema for the web app's generated types
@@ -141,6 +142,79 @@ def eval_all(
         return await run_all_evals(session, runtime, record=record, report_path=report)
 
     results = _run(lambda: _with_session(go))
+    typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
+
+
+@eval_app.command("llm")
+def eval_llm(
+    model: list[str] = typer.Option(
+        None,
+        "--model",
+        "-m",
+        help="Repeatable: heuristic | <model> | <model>:<effort>. Default: "
+        "heuristic, claude-opus-5:low, claude-opus-5:medium, claude-sonnet-5:low, "
+        "claude-haiku-4-5",
+    ),
+    max_usd: float = typer.Option(10.0, help="Stop calling the API once this much is spent"),
+    concurrency: int = typer.Option(4, help="Calls in flight per model"),
+    dry_run: bool = typer.Option(False, help="Print the estimated cost and exit"),
+    report: Path = typer.Option(None, help="Write a Markdown report here"),
+    record: bool = typer.Option(False, help="Also store each model as an eval_runs row"),
+) -> None:
+    """Run the hand-written set through each extractor: quality after the grounding verifier,
+    cost, latency. Reads the key from APP_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY."""
+    from app.eval.llm_compare import DEFAULT_CANDIDATES, Candidate, compare, estimate, render
+    from app.eval.realistic import load_realistic
+
+    configure_logging(json=False, level="WARNING")
+    try:
+        candidates = [Candidate.parse(m) for m in (model or DEFAULT_CANDIDATES)]
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    cases = load_realistic()
+    total = 0.0
+    for c in candidates:
+        est = float(estimate(cases, c))
+        total += est
+        typer.echo(f"{c.label:<28} {len(cases)} cases  ~${est:.2f}", err=True)
+    typer.echo(f"{'estimated total':<28} ~${total:.2f} (cap ${max_usd:.2f})", err=True)
+    if total > max_usd:
+        typer.echo(
+            "warning: estimate exceeds --max-usd; calls stop once the cap is spent", err=True
+        )
+    if dry_run:
+        return
+
+    settings = get_settings()
+    key = settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None
+    results = _run(
+        lambda: compare(
+            candidates,
+            api_key=key,
+            max_usd=max_usd,
+            concurrency=concurrency,
+            min_score=settings.grounding_min_score,
+            cases=cases,
+        )
+    )
+    if report is not None:
+        report.write_text(render(results), encoding="utf-8")
+    if record:
+
+        async def store(session: Any, _runtime: Any) -> None:
+            from app.db.models import EvalRun
+
+            for x in results["candidates"]:
+                session.add(
+                    EvalRun(
+                        kind="extraction",
+                        label=f"llm-compare:{x['candidate']}"[:100],
+                        metrics=x,
+                        params=results["conditions"],
+                    )
+                )
+
+        _run(lambda: _with_session(store))
     typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
 
 

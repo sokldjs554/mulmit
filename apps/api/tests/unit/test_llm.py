@@ -15,8 +15,8 @@ from app.llm.prompts import EXTRACT_SYSTEM, ChunkContext, extract_user_message
 from app.llm.providers.anthropic_provider import AnthropicProvider
 from app.llm.providers.heuristic import HeuristicProvider
 from app.llm.schemas import ExtractionOutput, strict_json_schema
-from app.llm.service import LLMService
-from app.llm.types import LLMRefusedError, LLMUnavailableError, Usage
+from app.llm.service import LLMService, cache_key
+from app.llm.types import LLMConfigError, LLMRefusedError, LLMUnavailableError, Usage
 
 CTX = ChunkContext(
     doc_type="council_minutes",
@@ -152,6 +152,38 @@ async def test_anthropic_request_shape_and_parse() -> None:
     assert result.value.signals[0].budget_krw == 350_000_000
     assert result.usage.cache_read_tokens == 1400
     assert result.served_by == "claude-opus-5"
+
+
+async def test_effort_is_omitted_for_models_without_the_knob() -> None:
+    messages = FakeMessages([_response(GOOD_OUTPUT)])
+    provider = AnthropicProvider(
+        api_key="test",
+        extract_model="claude-haiku-4-5",
+        extract_effort=None,
+        brief_model="claude-haiku-4-5",
+        brief_effort=None,
+        server_side_fallback=False,
+        client=SimpleNamespace(beta=SimpleNamespace(messages=messages)),  # type: ignore[arg-type]
+    )
+    await provider.extract(CTX)
+    call = messages.calls[0]
+    assert "effort" not in call["output_config"]
+    assert call["output_config"]["format"]["type"] == "json_schema"
+    assert "fallbacks" not in call and "betas" not in call
+
+
+async def test_missing_credentials_are_a_config_error_not_a_crash() -> None:
+    # What the SDK raises at request time when no key, token or profile was found.
+    provider, _ = _provider([TypeError("Could not resolve authentication method.")])
+    with pytest.raises(LLMConfigError):
+        await provider.extract(CTX)
+
+
+def test_cache_key_separates_efforts() -> None:
+    message = extract_user_message(CTX)
+    assert cache_key("claude-opus-5", "low", message) != cache_key(
+        "claude-opus-5", "medium", message
+    )
 
 
 async def test_refusal_is_typed() -> None:
