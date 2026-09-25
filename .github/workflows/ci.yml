@@ -43,6 +43,8 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.8.17"
+          # the lockfile forks numpy by Python version; CI must type-check what production runs
+          python-version: "3.11"
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
       - run: uv sync --frozen
