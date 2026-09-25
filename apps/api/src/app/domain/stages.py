@@ -69,6 +69,12 @@ COMMITMENT_MULTIPLIER: dict[str, float] = {
 }
 
 
+def tender_is_out(stage: Stage | str, bid_published_at: date | None) -> bool:
+    """The 입찰공고 is out: from here nothing about the tender is a forecast any more. The
+    conversion probability is 1.0 by definition, so it is not an estimate to show."""
+    return bid_published_at is not None or STAGE_ORDER[Stage(stage)] >= STAGE_ORDER[Stage.BID]
+
+
 def later(a: Stage, b: Stage) -> Stage:
     return a if STAGE_ORDER[a] >= STAGE_ORDER[b] else b
 

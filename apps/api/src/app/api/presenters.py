@@ -25,7 +25,7 @@ from app.db.models import (
     Recommendation,
     Signal,
 )
-from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage
+from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage, tender_is_out
 from app.domain.taxonomy import CATEGORIES, Category
 from app.domain.timing import remaining_window
 
@@ -126,6 +126,7 @@ def card(
         bid_window_end=window_end,
         window_passed=passed,
         bid_published_at=opp.bid_published_at,
+        tender_out=tender_is_out(opp.stage, opp.bid_published_at),
         conversion_prob=opp.conversion_prob,
         signal_count=opp.signal_count,
         first_seen_at=opp.first_seen_at,
