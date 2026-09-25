@@ -105,7 +105,7 @@
 | 클라우드(GCP 또는 AWS) 컨테이너 서비스 배포·운영 경험 | GCP Cloud Run Terraform, 배포 워크플로 |
 | Docker 기반 개발 환경 구성 경험 | `docker compose up`으로 DB·Redis·메일·API·워커·웹 |
 | 로깅·에러 트래킹 기반 장애 대응 경험 | structlog JSON(요청·작업 ID), Sentry, 워커 헬스체크, 런북 |
-| Git 브랜치 전략과 코드 리뷰 기반 협업 경험 | 짧은 브랜치 + 트렁크, Conventional Commits, PR 템플릿, CODEOWNERS ([CONTRIBUTING](CONTRIBUTING.md)) |
+| Git 브랜치 전략과 코드 리뷰 기반 협업 경험 | 짧은 브랜치 + 트렁크, squash merge, Conventional Commits, PR 템플릿, CODEOWNERS. PR 예: [#6](https://github.com/sokldjs554/procurement-forecast/pull/6) 의존성 PR 검토(액션 10개 호환성 대조), [#7](https://github.com/sokldjs554/procurement-forecast/pull/7) 기능 PR(코드 리뷰 15건 중 12건 반영, 3건은 이유 답변). 초기 구축은 main 직접 커밋 ([CONTRIBUTING](CONTRIBUTING.md)) |
 | 테스트 작성 및 정적 타입 검사를 습관으로 갖춘 분 | pytest 134개(실제 PostgreSQL·Redis), vitest 13개, mypy strict, CI 필수 통과 |
 | 명세가 불완전한 상태에서 구조를 세우고 문서로 남길 수 있는 능력 | 주요업무 9번 |
 
