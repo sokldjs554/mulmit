@@ -253,3 +253,32 @@ def test_heuristic_titles_read_like_project_names(answer: str, expected: str) ->
     from mulmit.llm.providers.heuristic import _guess_title
 
     assert _guess_title(answer, "") == expected
+
+
+def test_template_brief_advice_follows_the_stage_reached() -> None:
+    from mulmit.pipeline.brief import template_brief
+
+    def facts(stage: str, last_commitment: str) -> str:
+        return "\n".join(
+            [
+                "# 기회",
+                "- 사업명: 스마트쉘터 설치",
+                "- 기관: 서울특별시 강남구 / 부서: 교통행정과",
+                f"- 현재 단계: {stage} (공고 전)",
+                "- 추정 예산: 3억 5,000만원",
+                "",
+                "# 신호 (시간순, 원문 인용)",
+                f"- 2026-03-02 [의회 발언] 스마트쉘터 설치, {last_commitment}: 「…」",
+                "",
+                "# 이 기관의 최근 발주 이력",
+                "- (수집된 이력 없음)",
+            ]
+        )
+
+    prespec = template_brief(facts("사전규격", "확약(반영·편성)"))
+    assert "의견등록 기간" in prespec
+    assert "예산에 편성되기 전" not in prespec
+
+    council = template_brief(facts("의회 발언", "검토 중"))
+    assert "예산에 편성되기 전" in council
+    assert "가장 최근 발언이 확약이 아닙니다" in council
