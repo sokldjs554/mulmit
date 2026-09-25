@@ -3,7 +3,8 @@
 #
 # It spends real money (about $5 for the default set; `--max-usd` stops the calls), so it never
 # runs on push or pull_request — only when someone with write access starts it. The result is
-# pushed to an `eval/llm-<run id>` branch to be reviewed and merged as a PR like any change.
+# pushed to an `eval/llm-<run number>.<attempt>` branch (e.g. eval/llm-3.1) to be reviewed and
+# merged as a PR like any change; a re-run gets its own branch instead of failing to push.
 #
 # Setup once: Settings → Secrets and variables → Actions → New repository secret
 #             ANTHROPIC_API_KEY
@@ -72,11 +73,11 @@ jobs:
             ${{ runner.temp }}/eval-llm.json
       - name: Push the report to a branch
         run: |
-          branch="eval/llm-${GITHUB_RUN_ID}"
+          branch="eval/llm-${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"  # the "#N" shown in the UI
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$branch"
           git add ../../docs/evaluation-llm.md
-          git commit -m "docs(eval): Claude model × effort comparison (run ${GITHUB_RUN_ID})"
+          git commit -m "docs(eval): Claude model × effort comparison (run #${GITHUB_RUN_NUMBER})"
           git push origin "$branch"
           echo "Report pushed to \`$branch\` — open a PR from it." >> "$GITHUB_STEP_SUMMARY"

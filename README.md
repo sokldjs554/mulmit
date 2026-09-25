@@ -156,7 +156,7 @@ flowchart LR
 
 - 합성 세계 점수는 **파이프라인이 설계대로 동작한다는 증거일 뿐 실제 정확도가 아닙니다.** 같은 사람이 만든 생성기와 추출기는 같은 가정을 공유합니다. 수기 세트의 재현율 46.0%가 규칙 기반 추출기의 실제 한계에 더 가깝고, LLM 경로가 메워야 할 간격입니다.
 - 전체 리포트: [docs/evaluation.md](docs/evaluation.md) (`make eval`로 재생성).
-- **Claude 모델 비교**: `make eval-llm`이 같은 수기 세트를 규칙 기반·Opus 5(low·medium)·Sonnet 5(low)·Haiku 4.5로 돌려 정밀도·재현율·필드 정확도(검증기 통과 후), 검증기가 버리거나 고친 신호 수, 건당·1,000건당 비용, 지연 p50/p95를 [docs/evaluation-llm.md](docs/evaluation-llm.md)에 씁니다. API 키가 필요하고 한 번에 약 5달러이며(`--dry-run`으로 먼저 추정), `--max-usd`를 넘으면 호출을 멈춥니다. 로컬 대신 GitHub Actions의 **LLM eval** 워크플로(수동 실행, 저장소 시크릿 `ANTHROPIC_API_KEY`)로 돌리면 결과가 `eval/llm-<실행 번호>` 브랜치로 올라와 PR로 검토합니다.
+- **Claude 모델 비교**: `make eval-llm`이 같은 수기 세트를 규칙 기반·Opus 5(low·medium)·Sonnet 5(low)·Haiku 4.5로 돌려 정밀도·재현율·필드 정확도(검증기 통과 후), 검증기가 버리거나 고친 신호 수, 건당·1,000건당 비용, 지연 p50/p95를 [docs/evaluation-llm.md](docs/evaluation-llm.md)에 씁니다. API 키가 필요하고 한 번에 약 5달러이며(`--dry-run`으로 먼저 추정), `--max-usd`를 넘으면 호출을 멈춥니다. 로컬 대신 GitHub Actions의 **LLM eval** 워크플로(수동 실행, 저장소 시크릿 `ANTHROPIC_API_KEY`)로 돌리면 결과가 `eval/llm-<실행 번호>.<시도>` 브랜치(예: `eval/llm-3.1`)로 올라와 PR로 검토합니다.
 
 ## 대용량 쿼리
 
