@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatKRW, formatKRWCompact, formatPercent, formatWindow, leadLabel } from "./format";
+import { formatKRW, formatKRWCompact, formatPercent, formatWindow, headStartLabel, leadLabel } from "./format";
 
 describe("formatKRW", () => {
   it("renders 억/만 units the way budget books read aloud", () => {
@@ -46,5 +46,18 @@ describe("timing labels", () => {
     expect(formatPercent(0.876)).toBe("88%");
     expect(formatPercent(0.876, 1)).toBe("87.6%");
     expect(formatPercent(null)).toBe("–");
+  });
+});
+
+describe("headStartLabel", () => {
+  it("reads in months once the head start is longer than about six weeks", () => {
+    expect(headStartLabel(392)).toBe("13개월");
+    expect(headStartLabel(193)).toBe("6개월");
+    expect(headStartLabel(40)).toBe("40일");
+  });
+
+  it("shows nothing when the tender was the first thing we saw", () => {
+    expect(headStartLabel(null)).toBeNull();
+    expect(headStartLabel(0)).toBeNull();
   });
 });

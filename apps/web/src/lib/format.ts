@@ -53,6 +53,13 @@ export function leadLabel(days: number | null | undefined): string | null {
   return `약 ${Math.round(days / 30)}개월 후`;
 }
 
+/** How far ahead of the tender the first signal came: 392 → "13개월", 40 → "40일". */
+export function headStartLabel(days: number | null | undefined): string | null {
+  if (!days || days <= 0) return null;
+  if (days < 45) return `${days}일`;
+  return `${Math.round(days / 30.4)}개월`;
+}
+
 export function formatUSD(value: number): string {
   return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
 }

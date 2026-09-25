@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/primitives";
 import type { Schemas } from "@/lib/api/client";
-import { formatKRW, formatPercent, formatWindow, leadLabel } from "@/lib/format";
+import { formatKRW, formatPercent, formatWindow, headStartLabel, leadLabel } from "@/lib/format";
 import { STATUS_LABEL } from "@/lib/utils";
 
 import { StageRail } from "./stage-rail";
@@ -12,6 +12,7 @@ type Card = Schemas["OpportunityCard"];
 
 export function OpportunityCard({ item }: { item: Card }) {
   const lead = leadLabel(item.lead_days);
+  const headStart = headStartLabel(item.head_start_days);
   return (
     <Link
       href={`/app/opportunities/${item.id}`}
@@ -24,6 +25,12 @@ export function OpportunityCard({ item }: { item: Card }) {
             <Badge>{item.category_label}</Badge>
             {item.status === "bid_open" ? <Badge tone="warning">{STATUS_LABEL.bid_open}</Badge> : null}
             {lead ? <Badge tone="outline">입찰 {lead}</Badge> : null}
+            {headStart ? (
+              <Badge tone="good">
+                공고 {item.bid_published_at ? "" : "약 "}
+                {headStart} 전 포착
+              </Badge>
+            ) : null}
           </div>
           <h3 className="mt-2 text-[16px] leading-snug font-semibold text-ink group-hover:text-accent-text">
             {item.title}

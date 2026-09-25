@@ -76,6 +76,17 @@ def lead_days(opp: Opportunity, today: date) -> int | None:
     return (opp.bid_window_start - today).days
 
 
+def head_start_days(opp: Opportunity) -> int | None:
+    """How far ahead of the tender the first public signal came: up to the actual 입찰공고 when
+    there is one, else up to the start of the forecast window. None when the tender itself was
+    the first thing we saw — there was no head start to show."""
+    target = opp.bid_published_at or opp.bid_window_start
+    if target is None:
+        return None
+    days = (target - opp.first_seen_at).days
+    return days if days > 0 else None
+
+
 async def institution_names(session: AsyncSession) -> dict[str, str]:
     return dict((await session.execute(select(InstitutionRow.code, InstitutionRow.name))).all())
 
@@ -110,6 +121,7 @@ def card(
         reasons=explain(opp, rec.breakdown if rec else None),
         feedback=rec.feedback if rec else None,
         lead_days=lead_days(opp, today),
+        head_start_days=head_start_days(opp),
     )
 
 
