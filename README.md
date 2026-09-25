@@ -7,6 +7,8 @@
 
 지자체 사업은 입찰공고 6~18개월 전에 **지방의회 회의록**("내년도 본예산에 반영하겠습니다")과 **세출예산서 세부사업**으로 먼저 모습을 드러냅니다. 발주 예측은 이 문서들을 매일 읽어 수요 신호를 뽑고, 원문 근거를 검증한 뒤, 발주계획 → 사전규격 → 입찰공고로 이어지는 하나의 **기회**로 묶어 공급 기업에 추천합니다.
 
+구조로 보면 **공개 데이터를 매일 수집·구조화해 기업마다 맞춤 추천하고 알리는 B2B SaaS**입니다: 수집(공공 API·누리집 크롤링) → 추출·검증(LLM + 원문 대조) → 추천 → 알림 → 구독·크레딧 과금.
+
 ![기회 상세 — 의회 발언부터 사전규격까지 이어진 신호, 원문 근거 강조, 추천 이유, 금액 추이, Deep Brief](docs/screenshots/opportunity.png)
 
 <sub>화면과 수치는 모두 합성 데모 데이터입니다(아래 [평가](#평가) 참고).</sub>
@@ -16,9 +18,10 @@
 ## 목차
 - [왜 이 주제인가](#왜-이-주제인가)
 - [무엇을 하나](#무엇을-하나)
-- [채용 공고의 기술이 쓰인 곳](#채용-공고의-기술이-쓰인-곳)
+- [채용 공고 항목별 구현 위치](#채용-공고-항목별-구현-위치)
 - [아키텍처](#아키텍처)
 - [평가](#평가)
+- [대용량 쿼리](#대용량-쿼리)
 - [화면](#화면)
 - [실행하기](#실행하기)
 - [저장소 구조](#저장소-구조)
@@ -48,7 +51,7 @@
  (HTML)        (PDF·스캔·HWP) (API)         (API)         (API)
 ```
 
-1. **수집**: 다섯 개 공공 소스를 한도·장애를 견디며 증분 수집합니다.
+1. **수집**: 공공 API 다섯 개를 호출 한도·장애를 견디며 증분 수집하고, API가 없는 지자체 누리집 게시판은 robots.txt를 지키는 크롤러로 수집합니다.
 2. **파싱**: 스캔 PDF는 페이지 단위 OCR, HWP/HWPX는 직접 파싱, 회의록은 질문–답변 교환 단위로 자릅니다.
 3. **추출**: Claude 구조화 출력으로 사업명·금액·연도·발언 강도(확약/계획/검토/어렵다)·근거 문장을 뽑습니다. 키가 없거나 예산을 넘으면 규칙 기반 추출기가 대신합니다.
 4. **근거 검증**: 인용 문장이 원문에 있는지, 금액·연도가 원문과 맞는지 코드로 다시 확인합니다. 틀리면 버리거나 운영자 검토로 보냅니다.
@@ -56,32 +59,75 @@
 6. **추천·알림**: 회사 프로필 적합도에 공고 전환 가능성과 영업 가능한 선행 기간을 더해 순위를 매기고, 이메일·Slack·카카오 알림톡으로 알립니다.
 7. **과금**: 월 구독(토스페이먼츠 자동결제) + 크레딧(Deep Brief 1회 3크레딧).
 
-## 채용 공고의 기술이 쓰인 곳
+## 채용 공고 항목별 구현 위치
 
-| 공고 항목 | 이 저장소에서 | 위치 |
+공고의 문장을 그대로 옮기고, 각 항목이 이 저장소 어디에 있는지 적었습니다.
+
+### 주요업무
+
+| 공고 | 이 저장소에서 | 위치 |
 |---|---|---|
-| FastAPI 비동기 API | 앱 팩토리, async SQLAlchemy, 키셋 페이지네이션, 요청 ID·구조화 로그, 과금 API의 `Idempotency-Key` | [`api/`](apps/api/src/app/api) |
-| Redis 큐·cron 배치 | arq 워커 + KST cron, 작업 ID 중복 제거, 한도 초과·서킷·일시 오류별 재시도, 모든 실행 `job_runs` 기록 | [`worker/`](apps/api/src/app/worker), [ADR-0003](docs/adr/0003-arq-and-in-worker-cron.md) |
-| PostgreSQL 스키마·마이그레이션·쿼리 튜닝 | Alembic(비동기), 24개 테이블, pgvector HNSW, pg_trgm GIN, 부분 인덱스, `FOR UPDATE SKIP LOCKED`, CHECK 제약 | [`migrations/`](apps/api/migrations), [ADR-0004](docs/adr/0004-postgres-only-search.md) |
-| Next.js/TypeScript 사용자 웹·어드민 | App Router 고객 앱 + 운영 콘솔, OpenAPI 생성 타입, TanStack Query, BFF 프록시, SVG 차트 | [`apps/web`](apps/web), [ADR-0008](docs/adr/0008-bff-and-typed-client.md) |
-| LLM 파이프라인 (프롬프트·구조화 출력·검증·품질 평가·비용 최적화) | structured outputs, 프롬프트 캐싱, effort 조절, 서버 측 fallback, 근거 검증기, 트리아지, 콘텐츠 해시 캐시, 일일 예산 가드, 평가 러너 | [`llm/`](apps/api/src/app/llm), [`domain/grounding.py`](apps/api/src/app/domain/grounding.py), [ADR-0002](docs/adr/0002-grounded-extraction.md), [ADR-0006](docs/adr/0006-one-model-low-effort.md) |
-| 비정형 문서 파싱·OCR | PDF 페이지별 텍스트층 판정 → tesseract `kor+eng` OCR + 후보정, HWP5 레코드 파서, HWPX | [`parsing/`](apps/api/src/app/parsing) |
-| 대규모 데이터 수집·정규화 | 토큰 버킷 + KST 일일 한도(Redis Lua), 서킷 브레이커, HTTP 200 오류 본문 분류, 한국어 금액·기관·시점 정규화 | [`sources/`](apps/api/src/app/sources), [`domain/`](apps/api/src/app/domain), [데이터 소스](docs/data-sources.md) |
-| 검색·추천·랭킹 | 임베딩 + 규칙 결합 연결, 특징별 가중 랭킹과 설명, 백테스트로 전환율 보정, 사용자 피드백 | [`pipeline/`](apps/api/src/app/pipeline) |
-| 멀티채널 알림 | 이메일(Jinja2)·Slack 웹훅·카카오 알림톡(Solapi HMAC), 중복 방지, 방해 금지 시간, 영구 오류 시 채널 비활성화 | [`notify/`](apps/api/src/app/notify) |
-| 구독·크레딧 결제 | 토스 빌링키(Fernet 암호화), 멱등 결제·웹훅 대사, 추가 전용 크레딧 원장, 1·3·7일 재시도 | [`billing/`](apps/api/src/app/billing), [ADR-0005](docs/adr/0005-credit-ledger.md) |
-| 클라우드 컨테이너 배포·로깅·에러 트래킹 | Docker, Cloud Run(API 내부 전용·워커 상시), Cloud SQL, Memorystore, Secret Manager, WIF 배포, structlog JSON, Sentry | [`infra/terraform`](infra/terraform), [배포 워크플로](.github/workflows/deploy.yml) |
-| 의사결정 문서화 | ADR 8건, 아키텍처·런북·데이터 소스·평가 문서 | [`docs/`](docs) |
-| 테스트·정적 타입 | pytest 122개(실제 PostgreSQL·Redis 통합 테스트 포함), vitest 13개, mypy strict, TypeScript strict | [`apps/api/tests`](apps/api/tests) |
-| Git 브랜치 전략·코드 리뷰 | 짧은 브랜치 + 트렁크, Conventional Commits, PR 템플릿, CODEOWNERS | [CONTRIBUTING](CONTRIBUTING.md) |
-| AI 코딩 에이전트 활용 | 에이전트 지침(`AGENTS.md`), 평가 수치로 끝나는 작업 루프, 사람이 확인할 항목 명시 | [AI 워크플로](docs/ai-workflow.md) |
-| 대용량 공공 데이터 | 국회도서관 지방의정포털, 조달청 나라장터 3종, 지방재정365 | [데이터 소스](docs/data-sources.md) |
+| FastAPI 기반 비동기 API 서버의 기능 개발과 운영 (데이터 수집·추출·추천·알림·결제 도메인 전반) | 앱 팩토리, async SQLAlchemy, 키셋 페이지네이션, 요청 ID·구조화 로그, 과금 API의 `Idempotency-Key`. 수집·추출·추천·알림·결제 라우터 전부 | [`api/`](apps/api/src/app/api) |
+| 작업 큐(Redis)와 cron 잡 위에서 도는 대용량 배치 파이프라인 설계·개선 | arq 워커 + KST cron(매시 조달, 매일 회의록, 매주 예산서, 10분 스윕, 아침 요약), 작업 ID 중복 제거, 한도 초과·서킷·일시 오류별 재시도, 종료 신호 시 재시도로 기록, 실행 이력 `job_runs` | [`worker/`](apps/api/src/app/worker), [ADR-0003](docs/adr/0003-arq-and-in-worker-cron.md) |
+| PostgreSQL 스키마 설계와 마이그레이션, 대용량 데이터 환경에서의 쿼리 최적화 | 24개 테이블, Alembic 비동기 마이그레이션. 공고 10만·신호 40만 건 벤치로 찾은 문제를 마이그레이션 0002로 해결: 벡터 후보 **13건·재현율 4% → 300건·100%**, 참조번호 조회 **87ms → 0.02ms**, 운영 집계 173 → 124ms. 인덱스는 `CONCURRENTLY` | [`migrations/`](apps/api/migrations), [performance.md](docs/performance.md), [ADR-0010](docs/adr/0010-measure-at-volume.md) |
+| Next.js·TypeScript 기반 사용자 웹과 운영자 콘솔(admin) 화면 개발 | 고객 앱(피드·기회 상세·프로필·알림·요금) + 운영 콘솔(개요·수집원·작업 로그·검토 대기열·LLM 비용·평가) | [`apps/web`](apps/web) |
+| LLM 파이프라인 개선 (프롬프트 설계, 구조화 출력, 결과 검증, 품질 평가, 비용 최적화) | 구조화 출력(엄격 JSON 스키마), 프롬프트 캐싱, effort 조절, 원문 근거 검증기, 합성 정답·수기 세트 평가, 트리아지(청크 59% LLM 생략)·해시 캐시·일일 예산 가드 | [`llm/`](apps/api/src/app/llm), [`grounding.py`](apps/api/src/app/domain/grounding.py), [ADR-0002](docs/adr/0002-grounded-extraction.md), [ADR-0006](docs/adr/0006-one-model-low-effort.md) |
+| 비정형 문서 파싱과 OCR 파이프라인 정확도 개선 | PDF 페이지별 텍스트층 판정 → 부족한 페이지만 OCR(tesseract `kor+eng`) + 후보정(문자 오류율 1.13% → 0.99%, 금액 100%), HWP5 레코드 파서, HWPX | [`parsing/`](apps/api/src/app/parsing) |
+| 멀티채널 알림 발송(이메일·메신저)과 구독·크레딧 결제 도메인 개발 | 이메일·Slack·카카오 알림톡, 중복 방지·방해 금지 시간. 토스 정기결제(빌링키 암호화, 멱등 결제, 웹훅 대사, 1·3·7일 재시도) + 추가 전용 크레딧 원장 | [`notify/`](apps/api/src/app/notify), [`billing/`](apps/api/src/app/billing), [ADR-0005](docs/adr/0005-credit-ledger.md) |
+| 클라우드 컨테이너 서비스 배포·운영과 로깅·에러 트래킹 기반 장애 대응 | Docker 이미지 2개, GCP Cloud Run(API 내부 전용·워커 헬스체크)·Cloud SQL·Memorystore Terraform, 키 없는 배포(WIF), structlog JSON, Sentry, 런북 | [`infra/`](infra/terraform), [배포 워크플로](.github/workflows/deploy.yml), [런북](docs/runbook.md) |
+| 명세가 불완전한 요구사항을 구조로 세우고, 결정을 문서로 남기는 일 | ADR 10건(주제 선정부터 크롤러·대용량 인덱스까지), 시장 조사, 아키텍처·데이터 소스·평가·성능 문서 | [`docs/`](docs), [ADR 목록](docs/adr/README.md) |
+
+### 우대사항
+
+| 공고 | 이 저장소에서 | 위치 |
+|---|---|---|
+| LLM 애플리케이션 개발 경험 (프롬프트 설계, 구조화 출력, 결과 검증, 품질 평가) | 위 LLM 파이프라인 항목과 같음. 평가는 CI 품질 기준으로 강제 | [평가](docs/evaluation.md) |
+| 문서 파싱·데이터 수집 경험 (비정형 문서 처리, 대규모 크롤링, 데이터 정규화) | 지자체 누리집 게시판 크롤러(robots.txt, 호스트별 속도, 증분, 크기 상한, 바이트로 형식 판별), 한국어 금액·기관·시점 정규화 | [`crawler.py`](apps/api/src/app/sources/crawler.py), [`domain/`](apps/api/src/app/domain), [ADR-0009](docs/adr/0009-polite-board-crawler.md) |
+| OCR 파이프라인 구축 및 정확도 개선 경험 | 페이지 단위 OCR 판정, 이진화 전처리, 금액·조사 위주 후보정, 문자 오류율 측정 | [`ocr.py`](apps/api/src/app/parsing/ocr.py), [`ocr_correct.py`](apps/api/src/app/parsing/ocr_correct.py) |
+| 검색·추천·랭킹 시스템 설계 경험 | 벡터 + 트라이그램 + 분야로 후보 생성, 7개 특징 가중 랭킹과 추천 이유, 백테스트로 전환율 보정, 문서 간 기회 연결 | [`recommend.py`](apps/api/src/app/pipeline/recommend.py), [`link.py`](apps/api/src/app/pipeline/link.py) |
+| 결제·구독 시스템 연동 경험 (정기결제, 크레딧) | 토스페이먼츠 빌링 연동, 동시 사용에도 음수가 될 수 없는 크레딧 원장 | [`billing/`](apps/api/src/app/billing) |
+| AI 코딩 에이전트를 실제 개발 워크플로우에 녹여 본 경험 | 에이전트 지침, 평가 수치로 끝나는 작업 루프, 사람이 확인할 항목 명시 | [`AGENTS.md`](AGENTS.md), [AI 워크플로](docs/ai-workflow.md) |
+| 대규모 외부 공개 데이터를 다뤄 본 경험 | 국회도서관 지방의정포털, 조달청 나라장터 3종, 지방재정365, 지자체 누리집 | [데이터 소스](docs/data-sources.md) |
+
+<details>
+<summary><b>자격요건</b> (Backend · Frontend · Infra/운영 · 공통)</summary>
+
+| 공고 | 이 저장소에서 |
+|---|---|
+| Python 비동기 기반 API 서버 개발·운영 경험 (FastAPI 또는 동급 프레임워크) | FastAPI + async SQLAlchemy + asyncpg, 워커까지 전부 asyncio |
+| PostgreSQL 스키마 설계, 마이그레이션, 쿼리 최적화 경험 | 위 주요업무 3번 |
+| 작업 큐 / 스케줄러 기반 배치·크론잡 설계 및 운영 경험 | arq + cron, 작업 로그와 운영 콘솔 재실행 |
+| 외부 API 연동 시 timeout·재시도·폴백을 스스로 설계해 본 경험 | 공공 API: 지터 백오프, `Retry-After`, HTTP 200 오류 본문 분류, 서킷 브레이커, 일일 한도. LLM: 서버 측 fallback → 규칙 기반 추출기 |
+| TypeScript 실무 경험 (엄격한 타입 환경) | `strict` + `noUncheckedIndexedAccess`, OpenAPI에서 생성한 API 타입 |
+| Next.js·React 기반 웹 애플리케이션 개발 경험 | Next.js 16 App Router, React 19 |
+| 서버 상태 관리 및 API 연동 경험 | TanStack Query + openapi-fetch, BFF 프록시 |
+| 컴포넌트 시스템 기반 UI 구현 경험 | 디자인 토큰(라이트/다크) 위의 UI 컴포넌트, 차트 라이브러리 없는 SVG 차트 |
+| 클라우드(GCP 또는 AWS) 컨테이너 서비스 배포·운영 경험 | GCP Cloud Run Terraform, 배포 워크플로 |
+| Docker 기반 개발 환경 구성 경험 | `docker compose up`으로 DB·Redis·메일·API·워커·웹 |
+| 로깅·에러 트래킹 기반 장애 대응 경험 | structlog JSON(요청·작업 ID), Sentry, 워커 헬스체크, 런북 |
+| Git 브랜치 전략과 코드 리뷰 기반 협업 경험 | 짧은 브랜치 + 트렁크, Conventional Commits, PR 템플릿, CODEOWNERS ([CONTRIBUTING](CONTRIBUTING.md)) |
+| 테스트 작성 및 정적 타입 검사를 습관으로 갖춘 분 | pytest 134개(실제 PostgreSQL·Redis), vitest 13개, mypy strict, CI 필수 통과 |
+| 명세가 불완전한 상태에서 구조를 세우고 문서로 남길 수 있는 능력 | 주요업무 9번 |
+
+</details>
+
+<details>
+<summary><b>이런 분과 함께하고 싶습니다</b></summary>
+
+| 공고 | 이 저장소에서 |
+|---|---|
+| 지저분한 외부 데이터를 끈질기게 다루는 분 | HWP·스캔 PDF, 천원 단위 표, 동명 기관("중구"), HTTP 200으로 오는 오류, 로그인 페이지가 `.pdf`로 오는 게시판, 규칙 기반 추출기의 제목·분류 오류 개선 기록 |
+| 동작하는 코드보다 안정적으로 재현되는 코드를 우선하는 판단 기준 | 시드 고정 합성 세계, CI 품질 기준, 멱등 키, 대용량 벤치 + 회귀 테스트(수정 코드를 빼면 실패함을 확인) |
+| 백엔드·프론트엔드·인프라의 경계를 넘나드는 데 거부감이 없는 분 | 백엔드·웹·Terraform·CI를 한 저장소에서 |
+| 작은 팀에서 스스로 문제를 정의하고 끝까지 굴려 본 경험 | 시장 조사 → 주제 결정(ADR-0001) → 구현 → 평가 → 운영 문서까지 |
+
+</details>
 
 ## 아키텍처
 
 ```mermaid
 flowchart LR
-  S[지방의정포털 · 지방재정365 · 나라장터] --> I[수집<br/>한도·서킷]
+  S[지방의정포털 · 지방재정365 · 나라장터<br/>지자체 누리집 게시판] --> I[수집<br/>한도·서킷·크롤링]
   I --> P[파싱<br/>PDF·OCR·HWP] --> T[트리아지] --> E[추출<br/>Claude / 규칙]
   E --> V{근거 검증}
   V -- 통과 --> L[연결] --> O[기회] --> R[추천] --> N[알림]
@@ -110,6 +156,19 @@ flowchart LR
 
 - 합성 세계 점수는 **파이프라인이 설계대로 동작한다는 증거일 뿐 실제 정확도가 아닙니다.** 같은 사람이 만든 생성기와 추출기는 같은 가정을 공유합니다. 수기 세트의 재현율 61.5%가 규칙 기반 추출기의 실제 한계에 더 가깝고, LLM 경로가 메워야 할 간격입니다.
 - 전체 리포트: [docs/evaluation.md](docs/evaluation.md) (`make eval`로 재생성).
+
+## 대용량 쿼리
+
+데모 데이터는 수백 행이라 모든 쿼리가 순차 스캔이고, 인덱스 설계의 문제가 보이지 않습니다. `make bench`가 공고 10만·신호 40만·청크 60만·추천 30만 건을 만들어 핫 쿼리를 최초 스키마와 현재 스키마에서 비교합니다.
+
+| 쿼리 | 전 | 후 |
+|---|---|---|
+| 추천 후보: 가까운 진행 중 공고 300건 (벡터) | **13건만 반환, 재현율 4%** | 300건, 재현율 100% (3.9ms) |
+| 기회 연결: 처음 보는 발주계획번호 조회 | 87.5ms (신호 전체 스캔) | 0.02ms (GIN) |
+| 추천 후보: 키워드 | 인덱스 못 씀 (`= ANY`) | 트라이그램 + GIN BitmapOr |
+| 운영 개요 집계 | 173ms (청크 2회 스캔) | 124ms |
+
+첫 줄은 속도가 아니라 **정확성** 문제입니다. 전체 테이블 HNSW 인덱스에 상태 조건을 붙이면 pgvector가 `ef_search`(40)건을 찾은 뒤 필터를 적용해 결과가 조용히 줄어듭니다. 부분 인덱스 + `ef_search` 조정으로 고쳤고, 이 경로를 강제한 회귀 테스트가 있습니다. 전체 결과와 실행 계획: [docs/performance.md](docs/performance.md), 결정: [ADR-0010](docs/adr/0010-measure-at-volume.md).
 
 ## 화면
 
@@ -148,6 +207,7 @@ make api            # :8000   (다른 터미널)
 make worker         # arq 워커 + cron
 make web            # :3000
 make lint test eval
+make bench         # 대용량 쿼리 실행 계획 비교 (몇 분)
 ```
 
 ### 데모 계정
@@ -167,14 +227,15 @@ make lint test eval
 ```
 apps/api/             FastAPI · arq 워커 · 파이프라인 (Python 3.11, uv)
   src/app/
-    sources/          공공 API 어댑터, 한도·서킷·재시도
+    sources/          공공 API 어댑터, 누리집 게시판 크롤러, 한도·서킷·재시도
     parsing/          PDF 텍스트층, OCR(+후보정), HWP5/HWPX, 청크
     llm/              Claude 제공자, 규칙 기반 추출기, 캐시·예산 가드
     domain/           금액·기관·시점 정규화, 근거 검증, 분류, 동의어
     pipeline/         수집 → 처리 → 연결 → 추천 → 브리프, 백테스트
     billing/ notify/  토스 자동결제·크레딧 원장 / 이메일·Slack·알림톡
     api/ worker/      HTTP 라우터 / arq 작업·cron
-    demo/ eval/       합성 세계 / 평가 러너·수기 세트
+    demo/ eval/       합성 세계·합성 누리집 / 평가 러너·수기 세트
+    bench.py          대용량 쿼리 벤치 (manage bench)
   migrations/ tests/
 apps/web/             Next.js 16 고객 앱 + 운영 콘솔
 infra/terraform/      GCP 서울 리전 (Cloud Run, Cloud SQL, Memorystore, …)
@@ -185,8 +246,9 @@ docs/                 조사, ADR, 아키텍처, 평가, 데이터 소스, 런�
 
 솔직하게 적습니다.
 
-- **실제 공공 API는 호출해 보지 못했습니다.** 개발 환경의 네트워크 정책으로 `clik.nanet.go.kr`·`data.go.kr`·`lofin.mois.go.kr`에 접속할 수 없어, 경로·필드는 공개 명세와 공개 저장소를 근거로 작성하고 계약 픽스처로만 검증했습니다. 설정(`sources.config`)으로 코드 수정 없이 고칠 수 있게 해 두었습니다.
+- **실제 공공 API와 기관 누리집은 호출해 보지 못했습니다.** 개발 환경의 네트워크 정책으로 `clik.nanet.go.kr`·`data.go.kr`·`lofin.mois.go.kr`에 접속할 수 없어, 경로·필드는 공개 명세와 공개 저장소를 근거로 작성하고 계약 픽스처로만 검증했습니다. 크롤러도 합성 누리집에서만 검증했습니다. 어긋나는 부분은 설정(`sources.config`)으로 코드 수정 없이 고칠 수 있습니다.
 - **Claude 경로의 품질은 아직 측정 전입니다.** 요청 형태·오류 매핑·폴백은 테스트했지만, 실제 API로 수기 세트를 돌린 수치는 없습니다. 다음 단계는 같은 평가 러너로 규칙 기반 대비 개선을 재는 것입니다.
+- **대용량 벤치는 합성 데이터입니다.** 주제별로 뭉친 벡터와 균등한 기관 분포는 실제와 다릅니다. 실데이터가 쌓이면 `pg_stat_statements` 상위 쿼리로 다시 측정해야 합니다.
 - **인프라는 검증까지만 했습니다.** Terraform은 `validate`를 통과했고 CI가 이미지를 빌드하지만, 실제 GCP 프로젝트에 적용하지는 않았습니다.
 - **법·약관 검토 필요**: 공공누리 유형, 회의록 발언자 실명 표시 범위, 자동결제 약관.
 - 다음 후보: 검토 대기열 판정을 정답 세트로 축적, 예산서 표 구조 인식 개선, 기관별 발주 이력 기반 전환율 모델, 담당 부서 연락처 연결.
