@@ -232,3 +232,24 @@ async def test_heuristic_skips_operating_cost_budget_lines() -> None:
 def test_usage_cost_accounts_for_cache() -> None:
     usage = Usage(input_tokens=1_000_000, output_tokens=0, cache_read_tokens=1_000_000)
     assert usage.cost_usd("claude-opus-5") == Decimal("5.5")
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        # circumstance qualifiers are not part of the project name
+        (
+            "취지는 공감하나 현재 재정 여건상 스마트쉘터 설치는 당분간 추진하기 어렵습니다.",
+            "스마트쉘터 설치",
+        ),
+        # a spoken relative clause is kept whole rather than cut mid-clause
+        (
+            "AI가 이상행동을 먼저 잡아주는 CCTV는 필요성은 공감합니다만, 효과성 검증이 필요해서 적극 검토하겠습니다.",
+            "AI가 이상행동을 먼저 잡아주는 CCTV",
+        ),
+    ],
+)
+def test_heuristic_titles_read_like_project_names(answer: str, expected: str) -> None:
+    from mulmit.llm.providers.heuristic import _guess_title
+
+    assert _guess_title(answer, "") == expected

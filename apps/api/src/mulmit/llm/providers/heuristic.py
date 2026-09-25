@@ -94,8 +94,34 @@ _TIMING_HEAD_RE = re.compile(
 )
 
 
+# "현재 재정 여건상 스마트쉘터 설치는 …" — circumstance qualifiers are not part of the name.
+_QUALIFIER_HEAD_RE = re.compile(
+    r"^(?:(?:현재|당분간|우선|일단)\s+)*(?:(?:재정|예산|행정|인력)\s*)?(?:여건|사정|형편)상\s+"
+)
+# Verb forms that make the preceding words a relative clause ("먼저 잡아주는 CCTV").
+_ADNOMINAL_RE = re.compile(r"[가-힣]+(?:주는|하는|되는|잡는|있는|없는|알리는|막는)$")
+_CLAUSE_ARG_RE = re.compile(r"^[가-힣A-Za-z0-9·]+(?:을|를|이|가|의)$")
+
+
+def _with_relative_clause(source: str, start: int, candidate: str) -> str:
+    """Keep a spoken relative clause whole instead of starting the name mid-clause.
+
+    "AI가 이상행동을 먼저 잡아주는 CCTV는 …" matches as "먼저 잡아주는 CCTV"; walking left over the
+    clause's arguments (words ending in 을/를/이/가/의) recovers "AI가 이상행동을 먼저 잡아주는 CCTV".
+    """
+    words = candidate.split()
+    if not any(_ADNOMINAL_RE.fullmatch(w) for w in words[:-1]):
+        return candidate
+    before = re.split(r"[.,!?·\n]", source[:start])[-1].split()
+    taken: list[str] = []
+    while before and len(taken) < 3 and _CLAUSE_ARG_RE.fullmatch(before[-1]):
+        taken.insert(0, before.pop())
+    return " ".join([*taken, *words])
+
+
 def _clean_title(title: str) -> str:
     """Drop leading timing/filler words: "내년 하반기에 정보시스템 클라우드 전환" → "정보시스템 클라우드 전환"."""
+    title = _QUALIFIER_HEAD_RE.sub("", title)
     words = title.split()
     while words and (
         words[0] in _GENERIC_TITLE_HEADS
@@ -119,7 +145,7 @@ def _guess_title(answer: str, question: str) -> str | None:
     # Spoken subjects often lack a project suffix ("3차원 디지털트윈은 필요성은 공감합니다만").
     for source in (answer, question):
         for m in _SUBJECT_RE.finditer(source):
-            candidate = _clean_title(m.group(1))
+            candidate = _with_relative_clause(source, m.start(1), _clean_title(m.group(1)))
             _, conf = classify_category(candidate)
             if len(candidate) >= 2 and conf > 0:
                 return candidate
@@ -130,7 +156,7 @@ def _guess_project_title(answer: str, question: str) -> str | None:
     for source in (answer, question):
         best: str | None = None
         for m in _TITLE_RE.finditer(source):
-            candidate = _clean_title(m.group(1))
+            candidate = _with_relative_clause(source, m.start(1), _clean_title(m.group(1)))
             if len(candidate) < 3:
                 continue
             _, conf = classify_category(candidate)
@@ -158,9 +184,15 @@ def _extract_exchange(ctx: ChunkContext) -> list[ExtractedSignal]:
     level = commitment_level(answer)
     if level is None:
         return []
-    category, cat_conf = classify_category(question + " " + answer)
     title = _guess_title(answer, question)
-    if title is None or category is Category.OTHER:
+    if title is None:
+        return []
+    # The project name is the best evidence of its category; the surrounding exchange often
+    # drifts to other programmes (a parking question that mentions 어르신 이동 편의).
+    category, cat_conf = classify_category(title)
+    if cat_conf < 0.5:
+        category, cat_conf = classify_category(question + " " + answer)
+    if category is Category.OTHER:
         return []
     sentences = _sentences(answer)
     ladder = [p for phrases in COMMITMENT_LADDER.values() for p in phrases]
