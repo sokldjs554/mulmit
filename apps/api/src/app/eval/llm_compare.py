@@ -31,6 +31,7 @@ from app.llm.providers.heuristic import HeuristicProvider
 from app.llm.schemas import EXTRACTION_SCHEMA_VERSION, ExtractedSignal
 from app.llm.service import Provider, estimate_extract_cost
 from app.llm.types import (
+    PRICING_PER_MTOK,
     LLMBudgetExceededError,
     LLMConfigError,
     LLMInvalidOutputError,
@@ -60,6 +61,10 @@ class Candidate:
     def parse(cls, spec: str) -> Candidate:
         """``heuristic``, ``claude-opus-5`` (model default effort) or ``claude-opus-5:low``."""
         model, _, effort = spec.strip().partition(":")
+        if model != "heuristic" and model not in PRICING_PER_MTOK:
+            # Costs are computed from this table; an unpriced model would report wrong numbers.
+            known = ", ".join(["heuristic", *PRICING_PER_MTOK])
+            raise ValueError(f"unknown model {model!r}; one of {known} (add its price first)")
         if effort and effort not in EFFORTS:
             raise ValueError(f"unknown effort {effort!r} in {spec!r}; one of {', '.join(EFFORTS)}")
         return cls(model, effort or None)
