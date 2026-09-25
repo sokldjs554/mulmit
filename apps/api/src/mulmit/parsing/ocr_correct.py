@@ -10,7 +10,7 @@ Tesseract's Korean model makes predictable mistakes on budget tables:
 The corrector fixes numbers with context-bound regexes and domain words with a jamo-level nearest
 neighbour over a lexicon (taxonomy keywords + budget vocabulary + institution names). It only
 replaces a token when exactly one lexicon word is close enough — ambiguity leaves the text alone.
-Measured effect is recorded by ``mulmit eval ocr`` (CER before/after) — see docs/evaluation.md.
+Measured effect is recorded by ``mulmit eval all`` (CER before/after) — see docs/evaluation.md.
 """
 
 from __future__ import annotations

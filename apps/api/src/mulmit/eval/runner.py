@@ -355,7 +355,14 @@ async def run_all_evals(
     if src is None:
         raise RuntimeError("seed the demo world first (mulmit seed && mulmit demo run)")
     world = FixtureAdapter(src.key, src.config).world()
-    results = {
+    results: dict[str, Any] = {
+        "conditions": {
+            "anchor": src.config.get("anchor"),
+            "seed": src.config.get("seed"),
+            "scale": src.config.get("scale"),
+            "scanned_ratio": src.config.get("scanned_ratio"),
+            "extractor_mode": runtime.extractor_mode,
+        },
         "extraction": await eval_extraction(session, world),
         "linking": await eval_linking(session, world),
         "ocr": await eval_ocr(world, runtime),
@@ -394,11 +401,16 @@ def _pct(v: Any) -> str:
 def render_report(r: dict[str, Any]) -> str:
     e, lk, o, rl = r["extraction"], r["linking"], r["ocr"], r["realistic"]
     bt = r.get("backtest", {})
+    c = r.get("conditions", {})
     lines = [
         "# 평가 결과 (자동 생성: `mulmit eval all --report`)",
         "",
         "> 합성 세계(synthetic world) 결과는 파이프라인이 설계대로 동작하는지 보여줄 뿐, 실제 데이터에서의",
         "> 정확도를 주장하지 않습니다. 실제 문장에 가까운 수기 작성 세트(realistic)를 따로 둔 이유입니다.",
+        "",
+        f"조건: 기준일 {c.get('anchor')} · 시드 {c.get('seed')} · 규모 {c.get('scale')} · "
+        f"스캔 비율 {'기본값' if c.get('scanned_ratio') is None else c['scanned_ratio']} · "
+        f"추출기 `{c.get('extractor_mode')}`",
         "",
         "## 추출 (합성 정답 대비)",
         f"- 정밀도 {_pct(e['precision'])} · 재현율 {_pct(e['recall'])} (정답 {e['gold']}건, 예측 {e['predicted']}건)",

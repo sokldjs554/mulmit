@@ -8,7 +8,8 @@ Constraints that shape this adapter:
 * 1,000 calls/day per key and ≤100 rows per call → the list call pages by meeting date and the
   detail (full transcript) call is only made for minutes we have not stored yet.
 * Transcripts come as HTML fragments with ``<br>`` line breaks and speaker markers (○ / ◯).
-  We convert to text here and keep speaker lines intact for ``parsing/minutes.py``.
+  We convert to text here and keep speaker lines intact for ``parsing/chunking.py``, which
+  splits minutes into question/answer exchanges.
 
 Endpoint paths and field names live in ``DEFAULTS`` and can be overridden per source row
 (``sources.config``) — they follow the portal's published guide and were not verified live from
