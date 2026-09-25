@@ -30,7 +30,7 @@ from app.db.models import (
 )
 from app.domain.krw import format_krw
 from app.domain.stages import STAGE_LABEL, Stage
-from app.domain.timing import month_span
+from app.domain.timing import month_span, remaining_window
 from app.llm.prompts import BriefFacts, BriefSignal, PastTender
 from app.runtime import Runtime
 
@@ -130,16 +130,22 @@ async def build_facts(
         )
     ).all()
     profile = await session.get(CompanyProfile, org_id)
+    today = today or today_kst()
+    window_start, window_end = opp.bid_window_start, opp.bid_window_end
+    if not opp.bid_published_at:
+        start, end, passed = remaining_window(window_start, window_end, today)
+        if not passed:
+            window_start, window_end = start, end
     return BriefFacts(
-        today=today or today_kst(),
+        today=today,
         title=opp.title,
         institution=inst.name if inst else None,
         department=opp.department,
         stage=Stage(opp.stage),
         status=opp.status,
         est_budget_krw=opp.est_budget_krw,
-        window_start=opp.bid_window_start,
-        window_end=opp.bid_window_end,
+        window_start=window_start,
+        window_end=window_end,
         bid_published_at=opp.bid_published_at,
         best_commitment=opp.best_commitment,
         conversion_prob=opp.conversion_prob,

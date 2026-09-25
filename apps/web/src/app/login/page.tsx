@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Logo } from "@/components/layout/shell";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,15 @@ function LoginForm() {
       },
     });
 
+  // "데모로 둘러보기" on the landing page links here with ?demo=customer: sign straight in.
+  const demo = params.get("demo");
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (autoStarted.current || (demo !== "customer" && demo !== "operator")) return;
+    autoStarted.current = true;
+    submit(demo === "operator" ? ADMIN : DEMO);
+  });
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     submit({ email, password });
@@ -36,7 +45,7 @@ function LoginForm() {
   return (
     <Card className="w-full max-w-sm p-6">
       <Logo />
-      <h1 className="mt-6 text-xl font-bold text-ink">로그인</h1>
+      <h1 className="mt-6 text-xl font-bold text-ink">{demo && !login.error ? "데모를 여는 중이에요…" : "로그인"}</h1>
       <p className="mt-1 text-sm text-muted">공고가 나오기 전에 잡힌 사업들이 기다리고 있어요.</p>
       <form className="mt-6 space-y-4" onSubmit={onSubmit}>
         <Field label="이메일" htmlFor="email">

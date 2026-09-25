@@ -175,7 +175,7 @@ export default function OpportunityPage() {
           <StatTile
             label="입찰 예상 시기"
             value={formatWindow(data.bid_window_start, data.bid_window_end)}
-            sub={lead ? `입찰 ${lead}` : undefined}
+            sub={lead ? `입찰 ${lead}` : data.window_passed ? "예상 시기가 지났는데 아직 공고 전" : undefined}
           />
         )}
         <StatTile label="공고로 이어질 확률" value={formatPercent(data.conversion_prob)} sub="지난 데이터로 보정" />

@@ -27,6 +27,7 @@ export function OpportunityCard({ item }: { item: Card }) {
             <Badge>{item.category_label}</Badge>
             {item.status === "bid_open" ? <Badge tone="warning">{STATUS_LABEL.bid_open}</Badge> : null}
             {lead ? <Badge tone="outline">입찰 {lead}</Badge> : null}
+            {item.window_passed ? <Badge tone="outline">예상 시기 지남</Badge> : null}
             {headStart ? <Badge tone="good">공고 {headStart} 전에 찾음</Badge> : null}
           </div>
           <h3 className="mt-2 text-[16px] leading-snug font-semibold text-ink group-hover:text-accent-text">

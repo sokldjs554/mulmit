@@ -102,6 +102,8 @@ class OpportunityCard(BaseModel):
     est_budget_krw: int | None
     bid_window_start: date | None
     bid_window_end: date | None
+    # the forecast window's end has passed with no tender yet; the window is then shown as-is
+    window_passed: bool = False
     bid_published_at: date | None
     conversion_prob: float
     signal_count: int
@@ -118,6 +120,7 @@ class FeedPage(BaseModel):
     items: list[OpportunityCard]
     next_cursor: str | None
     total: int
+    stage_counts: dict[str, int] = {}  # same filters, per stage, ignoring the stage filter
 
 
 class EvidenceOut(BaseModel):

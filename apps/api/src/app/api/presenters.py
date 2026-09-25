@@ -27,6 +27,7 @@ from app.db.models import (
 )
 from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage
 from app.domain.taxonomy import CATEGORIES, Category
+from app.domain.timing import remaining_window
 
 _COMMITMENT_KO = {
     "committed": "의회에서 '반영하겠다'고 답함",
@@ -71,9 +72,11 @@ def explain(opp: Opportunity, breakdown: dict[str, Any] | None) -> list[str]:
 
 
 def lead_days(opp: Opportunity, today: date) -> int | None:
-    if opp.bid_published_at or opp.bid_window_start is None:
+    """Days until the forecast window opens; 0 inside it; None once it has passed."""
+    if opp.bid_published_at:
         return None
-    return (opp.bid_window_start - today).days
+    start, _, passed = remaining_window(opp.bid_window_start, opp.bid_window_end, today)
+    return None if start is None or passed else (start - today).days
 
 
 def head_start_days(opp: Opportunity) -> int | None:
@@ -97,6 +100,12 @@ def card(
     rec: Recommendation | None,
     today: date,
 ) -> OpportunityCard:
+    if opp.bid_published_at:
+        window_start, window_end, passed = opp.bid_window_start, opp.bid_window_end, False
+    else:
+        window_start, window_end, passed = remaining_window(
+            opp.bid_window_start, opp.bid_window_end, today
+        )
     return OpportunityCard(
         id=opp.id,
         title=opp.title,
@@ -110,8 +119,9 @@ def card(
         stage_label=STAGE_LABEL[Stage(opp.stage)],
         status=opp.status,
         est_budget_krw=opp.est_budget_krw,
-        bid_window_start=opp.bid_window_start,
-        bid_window_end=opp.bid_window_end,
+        bid_window_start=window_start,
+        bid_window_end=window_end,
+        window_passed=passed,
         bid_published_at=opp.bid_published_at,
         conversion_prob=opp.conversion_prob,
         signal_count=opp.signal_count,

@@ -77,11 +77,14 @@ export function useLogout() {
 }
 
 // --- feed & opportunities ----------------------------------------------------------------------
+export type FeedSort = "score" | "soon" | "recent";
+
 export type FeedFilters = {
   stage?: string[];
   category?: string[];
   status?: string[];
   q?: string;
+  sort?: FeedSort;
 };
 
 export function useFeed(filters: FeedFilters) {
@@ -97,6 +100,7 @@ export function useFeed(filters: FeedFilters) {
               category: filters.category?.length ? filters.category : undefined,
               status: filters.status?.length ? filters.status : undefined,
               q: filters.q || undefined,
+              sort: filters.sort,
               cursor: pageParam,
               limit: 20,
             },

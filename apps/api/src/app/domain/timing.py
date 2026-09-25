@@ -81,3 +81,19 @@ def month_span(start: date, end: date | None = None) -> str:
     if start.year == end.year:
         return f"{start.year}년 {start.month}~{end.month}월"
     return f"{start.year}년 {start.month}월~{end.year}년 {end.month}월"
+
+
+def remaining_window(
+    start: date | None, end: date | None, today: date
+) -> tuple[date | None, date | None, bool]:
+    """What is left of a forecast window as of ``today``: (start, end, passed).
+
+    A window that has already opened without a tender starts today — "2026년 1~11월" read in
+    September means "any day until November". A window that has closed stays as it was and is
+    flagged, so it is shown as overdue rather than as a live forecast."""
+    if start is None:
+        return None, None, False
+    last = end or start
+    if last < today:
+        return start, end, True
+    return max(start, today), end, False

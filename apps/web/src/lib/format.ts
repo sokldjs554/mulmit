@@ -45,10 +45,10 @@ export function formatPercent(value: number | null | undefined, digits = 0): str
   return `${(value * 100).toFixed(digits)}%`;
 }
 
-/** Time until the forecast bid window, read after "입찰" (입찰 임박 · 입찰 약 4개월 후). */
+/** Time until the forecast bid window, read after "입찰" (입찰 예상 기간 중 · 입찰 약 4개월 후). */
 export function leadLabel(days: number | null | undefined): string | null {
   if (days === null || days === undefined) return null;
-  if (days <= 0) return "임박";
+  if (days <= 0) return "예상 기간 중";
   if (days < 45) return `약 ${days}일 후`;
   return `약 ${Math.round(days / 30)}개월 후`;
 }

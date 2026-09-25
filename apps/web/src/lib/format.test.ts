@@ -36,7 +36,7 @@ describe("timing labels", () => {
   });
 
   it("switches from days to months after ~6 weeks", () => {
-    expect(leadLabel(0)).toBe("임박");
+    expect(leadLabel(0)).toBe("예상 기간 중");
     expect(leadLabel(30)).toBe("약 30일 후");
     expect(leadLabel(300)).toBe("약 10개월 후");
     expect(leadLabel(null)).toBeNull();

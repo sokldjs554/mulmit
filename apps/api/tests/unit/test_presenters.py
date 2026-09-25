@@ -20,3 +20,35 @@ def test_head_start_runs_to_the_forecast_window_before_the_tender() -> None:
 def test_no_head_start_when_the_tender_was_the_first_signal_or_nothing_is_forecast() -> None:
     assert head_start_days(_opp(date(2026, 9, 5), published=date(2026, 9, 5))) is None
     assert head_start_days(_opp(date(2026, 1, 5))) is None
+
+
+def test_a_window_that_has_opened_is_shown_from_today() -> None:
+    from app.domain.timing import remaining_window
+
+    today = date(2026, 9, 25)
+    assert remaining_window(date(2026, 1, 1), date(2026, 11, 30), today) == (
+        today,
+        date(2026, 11, 30),
+        False,
+    )
+    assert remaining_window(date(2026, 12, 1), date(2027, 2, 28), today)[0] == date(2026, 12, 1)
+    assert remaining_window(date(2026, 1, 1), date(2026, 3, 31), today) == (
+        date(2026, 1, 1),
+        date(2026, 3, 31),
+        True,
+    )
+    assert remaining_window(None, None, today) == (None, None, False)
+
+
+def test_lead_days_stop_once_the_window_has_passed() -> None:
+    from app.api.presenters import lead_days
+
+    today = date(2026, 9, 25)
+    opened = Opportunity(
+        bid_published_at=None, bid_window_start=date(2026, 1, 1), bid_window_end=date(2026, 11, 30)
+    )
+    passed = Opportunity(
+        bid_published_at=None, bid_window_start=date(2026, 1, 1), bid_window_end=date(2026, 3, 31)
+    )
+    assert lead_days(opened, today) == 0
+    assert lead_days(passed, today) is None
