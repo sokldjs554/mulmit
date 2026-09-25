@@ -115,7 +115,7 @@ class ResilientClient:
             timeout=httpx.Timeout(timeout, connect=5.0),
             transport=transport,
             headers={
-                "User-Agent": "procurement-forecast-collector/0.1 (+https://github.com/sokldjs554/mulmit)"
+                "User-Agent": "procurement-forecast-collector/0.1 (+https://github.com/sokldjs554/procurement-forecast)"
             },
             follow_redirects=True,
         )

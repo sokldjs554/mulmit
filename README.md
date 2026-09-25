@@ -2,7 +2,7 @@
 
 **입찰공고 전에 공공사업을 미리 확인하는 공공조달 발주 예측 서비스**
 
-[![CI](https://github.com/sokldjs554/mulmit/actions/workflows/ci.yml/badge.svg)](https://github.com/sokldjs554/mulmit/actions/workflows/ci.yml)
+[![CI](https://github.com/sokldjs554/procurement-forecast/actions/workflows/ci.yml/badge.svg)](https://github.com/sokldjs554/procurement-forecast/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 지자체 사업은 입찰공고 6~18개월 전에 **지방의회 회의록**("내년도 본예산에 반영하겠습니다")과 **세출예산서 세부사업**으로 먼저 모습을 드러냅니다. 발주 예측은 이 문서들을 매일 읽어 수요 신호를 뽑고, 원문 근거를 검증한 뒤, 발주계획 → 사전규격 → 입찰공고로 이어지는 하나의 **기회**로 묶어 공급 기업에 추천합니다.
