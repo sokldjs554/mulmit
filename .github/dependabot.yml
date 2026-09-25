@@ -1,13 +1,25 @@
+# Minor/patch updates arrive as one grouped PR per ecosystem. Major versions are deliberate
+# upgrades (framework migrations, arq's redis<6 cap), done by hand with the eval gate green.
 version: 2
 updates:
   - package-ecosystem: uv
     directory: /apps/api
     schedule: {interval: weekly}
-    groups: {python: {patterns: ["*"]}}
+    groups:
+      python: {patterns: ["*"], update-types: [minor, patch]}
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
   - package-ecosystem: npm
     directory: /apps/web
     schedule: {interval: weekly}
-    groups: {web: {patterns: ["*"]}}
+    groups:
+      web: {patterns: ["*"], update-types: [minor, patch]}
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: monthly}
+    groups:
+      actions: {patterns: ["*"]}
