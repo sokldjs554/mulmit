@@ -1,4 +1,5 @@
-"""arq worker entrypoint: ``arq mulmit.worker.settings.WorkerSettings``.
+"""arq worker settings. Run with ``mulmit worker`` (adds /healthz on $PORT for Cloud Run) or
+plain ``arq mulmit.worker.settings.WorkerSettings``.
 
 Cron runs inside the worker (arq de-duplicates cron runs across replicas by job id), so the
 Cloud Run worker service can scale to N instances without double-firing schedules (ADR-0003).

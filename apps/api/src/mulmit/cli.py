@@ -4,6 +4,7 @@ mulmit db upgrade                 # alembic upgrade head
 mulmit seed [--anchor 2026-09-25] # institutions, sources, demo tenants
 mulmit demo run                   # full pipeline over the synthetic world, in-process
 mulmit eval all --record          # extraction / linking / OCR / realistic-set evals
+mulmit worker                     # arq worker + cron (+ /healthz on $PORT for Cloud Run)
 mulmit openapi > openapi.json     # schema for the web app's generated types
 """
 
@@ -140,6 +141,14 @@ def eval_all(
 
     results = _run(lambda: _with_session(go))
     typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
+
+
+@app.command()
+def worker() -> None:
+    """Run the arq worker (queue + cron). Serves GET /healthz on $PORT when set (Cloud Run)."""
+    from mulmit.worker.runner import run
+
+    run()
 
 
 @app.command()

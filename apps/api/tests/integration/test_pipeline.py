@@ -87,3 +87,33 @@ async def test_reprocessing_a_document_is_idempotent(demo_world, runtime) -> Non
             select(func.count()).select_from(Signal).where(Signal.document_id == doc.id)
         )
     assert before == after
+
+
+async def test_job_cancelled_by_shutdown_is_recorded_as_retrying(demo_world) -> None:  # type: ignore[no-untyped-def]
+    import asyncio
+    import contextlib
+
+    from sqlalchemy import select
+
+    from mulmit.db.models import JobRun
+    from mulmit.db.session import session_scope
+    from mulmit.worker.tasks import tracked
+
+    started = asyncio.Event()
+
+    @tracked("slow_probe")
+    async def slow_probe(ctx: dict[str, object]) -> dict[str, int]:
+        started.set()
+        await asyncio.sleep(30)
+        return {"done": 1}
+
+    task = asyncio.create_task(slow_probe({"job_id": "probe:cancel", "job_try": 1}))
+    await started.wait()
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    async with session_scope() as s:
+        run = await s.scalar(select(JobRun).where(JobRun.job_id == "probe:cancel"))
+    assert run is not None
+    assert run.status == "retrying"
+    assert run.finished_at is not None

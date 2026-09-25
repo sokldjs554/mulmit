@@ -17,6 +17,7 @@ with exponential backoff. Non-retryable failures are recorded and surface in *Ad
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import json
 import time
@@ -103,6 +104,10 @@ def tracked(name: str) -> Callable[[F], F]:
                     raise
                 status, error = "retrying", str(exc)
                 raise Retry(defer=timedelta(seconds=30 * 2 ** (attempt - 1))) from exc
+            except asyncio.CancelledError:
+                # Worker shutdown (SIGTERM on deploy): arq puts the job back on the queue.
+                status, error = "retrying", "cancelled by worker shutdown"
+                raise
             except Exception as exc:
                 status, error = "failed", f"{type(exc).__name__}: {exc}"
                 log.exception("job.failed")
