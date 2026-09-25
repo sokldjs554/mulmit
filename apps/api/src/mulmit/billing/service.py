@@ -201,7 +201,7 @@ async def change_plan(
         sub,
         amount=plan.monthly_price_krw,
         order_id=order_id,
-        order_name=f"물밑 {plan.name} 월 구독",
+        order_name=f"발주 예측 {plan.name} 월 구독",
         kind="subscription",
     )
     if sub.current_period_start and sub.current_period_end:
@@ -258,7 +258,7 @@ async def renew_due(
                 sub,
                 amount=plan.monthly_price_krw,
                 order_id=f"sub_{org.id}_{sub.plan}_{period_key(end)}_a{attempt}",
-                order_name=f"물밑 {plan.name} 월 구독",
+                order_name=f"발주 예측 {plan.name} 월 구독",
                 kind="subscription",
             )
         except PaymentDeclinedError as exc:
@@ -304,7 +304,7 @@ async def purchase_credits(
         sub,
         amount=price,
         order_id=f"cred_{org.id}_{request_id}"[:64],
-        order_name=f"물밑 크레딧 {credits}개",
+        order_name=f"발주 예측 크레딧 {credits}개",
         kind="credit_pack",
     )
     await apply_credits(

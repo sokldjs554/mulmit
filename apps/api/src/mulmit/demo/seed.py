@@ -157,7 +157,9 @@ DEMO_TENANTS = (
             "budget_max": 800_000_000,
         },
     ),
-    DemoTenant("물밑 운영팀", "admin@mulmit.dev", "운영자", "team", {"keywords": []}, staff=True),
+    DemoTenant(
+        "발주 예측 운영팀", "admin@mulmit.dev", "운영자", "team", {"keywords": []}, staff=True
+    ),
 )
 
 

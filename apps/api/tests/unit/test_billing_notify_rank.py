@@ -64,7 +64,7 @@ async def test_toss_billing_charge_sends_idempotency_key_and_basic_auth() -> Non
         customer_key="cus_1",
         amount=99000,
         order_id="o-1",
-        order_name="물밑 Pro",
+        order_name="발주 예측 Pro",
         idempotency_key="o-1",
     )
     assert result.status == "DONE" and result.amount == 99000
@@ -75,7 +75,7 @@ async def test_toss_billing_charge_sends_idempotency_key_and_basic_auth() -> Non
         "customerKey": "cus_1",
         "amount": 99000,
         "orderId": "o-1",
-        "orderName": "물밑 Pro",
+        "orderName": "발주 예측 Pro",
     }
 
 
@@ -122,7 +122,7 @@ def test_email_render_escapes_html_and_has_text_part() -> None:
     email = render_email(PAYLOAD)
     assert "&lt;b&gt;반영&lt;/b&gt;" in email.html
     assert "<b>반영</b>" in email.text  # plain text is not HTML-escaped
-    assert email.subject.startswith("[물밑]")
+    assert email.subject.startswith("[발주 예측]")
 
 
 def test_slack_and_kakao_render() -> None:

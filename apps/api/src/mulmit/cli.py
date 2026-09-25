@@ -25,7 +25,7 @@ from mulmit.clock import today_kst
 from mulmit.log import configure_logging
 from mulmit.settings import get_settings
 
-app = typer.Typer(help="물밑(Mulmit) operations CLI", no_args_is_help=True)
+app = typer.Typer(help="발주 예측 operations CLI", no_args_is_help=True)
 db_app = typer.Typer(help="Database")
 demo_app = typer.Typer(help="Synthetic demo world")
 eval_app = typer.Typer(help="Evaluations")

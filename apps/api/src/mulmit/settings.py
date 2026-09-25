@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
     smtp_use_tls: bool = False
-    mail_from: str = "물밑 알림 <alerts@mulmit.local>"
+    mail_from: str = "발주 예측 알림 <alerts@mulmit.local>"
     solapi_api_key: SecretStr | None = None
     solapi_api_secret: SecretStr | None = None
     kakao_pf_id: str | None = None

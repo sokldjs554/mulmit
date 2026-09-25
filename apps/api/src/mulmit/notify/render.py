@@ -29,7 +29,7 @@ class RenderedEmail:
 
 
 def render_email(payload: dict[str, Any]) -> RenderedEmail:
-    subject = f"[물밑] {payload['headline']}"
+    subject = f"[발주 예측] {payload['headline']}"
     html = _env.get_template("digest.html.j2").render(**payload)
     text = _text_env.get_template("digest.txt.j2").render(**payload)
     return RenderedEmail(subject, html, text)
@@ -37,7 +37,10 @@ def render_email(payload: dict[str, Any]) -> RenderedEmail:
 
 def render_slack(payload: dict[str, Any]) -> dict[str, Any]:
     blocks: list[dict[str, Any]] = [
-        {"type": "header", "text": {"type": "plain_text", "text": f"물밑 · {payload['headline']}"}},
+        {
+            "type": "header",
+            "text": {"type": "plain_text", "text": f"발주 예측 · {payload['headline']}"},
+        },
     ]
     for item in payload["items"][:10]:
         meta = f"{item['stage_label']} · {item['institution']}"
@@ -54,7 +57,7 @@ def render_slack(payload: dict[str, Any]) -> dict[str, Any]:
             "elements": [{"type": "mrkdwn", "text": f"<{payload['settings_url']}|알림 설정>"}],
         }
     )
-    return {"text": f"[물밑] {payload['headline']}", "blocks": blocks}
+    return {"text": f"[발주 예측] {payload['headline']}", "blocks": blocks}
 
 
 def render_kakao_variables(payload: dict[str, Any]) -> dict[str, str]:

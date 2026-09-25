@@ -47,7 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             await dispose_engine()
 
     app = FastAPI(
-        title="물밑 Mulmit API",
+        title="발주 예측 API",
         version=__version__,
         description="B2G pre-procurement signal intelligence.",
         lifespan=lifespan,

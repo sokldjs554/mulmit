@@ -13,7 +13,7 @@ import {
   LogOut,
   Radar,
   UserRound,
-  Waves,
+  TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,9 +29,9 @@ export function Logo({ className }: { className?: string }) {
   return (
     <Link href="/" className={cn("inline-flex items-center gap-2 font-bold tracking-tight text-ink", className)}>
       <span className="inline-flex size-7 items-center justify-center rounded-lg bg-accent text-accent-ink">
-        <Waves className="size-4" aria-hidden />
+        <TrendingUp className="size-4" aria-hidden />
       </span>
-      <span className="text-[17px]">물밑</span>
+      <span className="text-[17px]">발주 예측</span>
     </Link>
   );
 }

@@ -1,11 +1,11 @@
-# 물밑 (Mulmit)
+# 발주 예측
 
 **입찰공고가 뜨기 전에, 공공 수요를 먼저 읽는 B2G 영업 인텔리전스**
 
 [![CI](https://github.com/sokldjs554/mulmit/actions/workflows/ci.yml/badge.svg)](https://github.com/sokldjs554/mulmit/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-지자체 사업은 입찰공고 6~18개월 전에 **지방의회 회의록**("내년도 본예산에 반영하겠습니다")과 **세출예산서 세부사업**으로 먼저 모습을 드러냅니다. 물밑은 이 문서들을 매일 읽어 수요 신호를 뽑고, 원문 근거를 검증한 뒤, 발주계획 → 사전규격 → 입찰공고로 이어지는 하나의 **기회**로 묶어 공급 기업에 추천합니다.
+지자체 사업은 입찰공고 6~18개월 전에 **지방의회 회의록**("내년도 본예산에 반영하겠습니다")과 **세출예산서 세부사업**으로 먼저 모습을 드러냅니다. 발주 예측은 이 문서들을 매일 읽어 수요 신호를 뽑고, 원문 근거를 검증한 뒤, 발주계획 → 사전규격 → 입찰공고로 이어지는 하나의 **기회**로 묶어 공급 기업에 추천합니다.
 
 ![기회 상세 — 의회 발언부터 사전규격까지 이어진 신호, 원문 근거 강조, 추천 이유, 금액 추이, Deep Brief](docs/screenshots/opportunity.png)
 

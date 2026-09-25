@@ -65,7 +65,7 @@ export default function Home() {
           이미 늦었습니다.
         </h1>
         <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-ink-2">
-          공공사업은 공고 6~18개월 전에 지방의회 회의록과 예산서에서 먼저 모습을 드러냅니다. 물밑은 그 문서들을 매일 읽고, 우리 회사가 영업을
+          공공사업은 공고 6~18개월 전에 지방의회 회의록과 예산서에서 먼저 모습을 드러냅니다. 발주 예측은 그 문서들을 매일 읽고, 우리 회사가 영업을
           시작해야 할 사업을 근거 문장과 함께 알려드립니다.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
@@ -99,7 +99,7 @@ export default function Home() {
                 <p className="mt-1 text-[12px] text-muted">{step.source}</p>
                 <p className="mt-3 text-[13px] leading-relaxed text-ink-2">「{step.quote}」</p>
                 {step.us ? (
-                  <p className="mt-3 text-[12px] font-semibold text-accent-text">▲ 물밑이 알려주는 시점</p>
+                  <p className="mt-3 text-[12px] font-semibold text-accent-text">▲ 발주 예측이 알려주는 시점</p>
                 ) : null}
                 {step.them ? <p className="mt-3 text-[12px] font-semibold text-muted">▲ 일반 입찰 알림이 알려주는 시점</p> : null}
               </li>
@@ -123,7 +123,7 @@ export default function Home() {
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-6 text-[12px] text-muted">
-          <span>물밑 · 포트폴리오 프로젝트 — 데모 데이터는 모두 합성된 것입니다.</span>
+          <span>발주 예측 · 포트폴리오 프로젝트 — 데모 데이터는 모두 합성된 것입니다.</span>
           <span>국회도서관 지방의정포털 · 조달청 나라장터 · 행정안전부 지방재정365 Open API 기반 설계</span>
         </div>
       </footer>

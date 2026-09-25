@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "물밑 Mulmit API",
+    "title": "발주 예측 API",
     "description": "B2G pre-procurement signal intelligence.",
     "version": "0.1.0"
   },
