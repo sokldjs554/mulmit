@@ -161,6 +161,8 @@ flowchart LR
 
 같은 수기 세트를 실제 Claude API로 돌린 결과입니다([LLM eval #3](https://github.com/sokldjs554/procurement-forecast/actions/runs/36158136197), 전체 표: [docs/evaluation-llm.md](docs/evaluation-llm.md)). 점수는 원문 근거 검증기를 거쳐 **저장되는 값** 기준입니다.
 
+측정 방법: `make eval-llm`이 수기 세트를 추출기마다 돌려 정확도, 검증기가 버리거나 고친 신호 수, 비용, 지연을 기록합니다. `--dry-run` 추정은 출력 토큰을 넉넉히 잡아 약 5달러로 나오지만 실제 한 실행은 $1.65였고, `--max-usd`를 넘으면 호출을 멈춥니다. GitHub Actions의 **LLM eval** 워크플로(수동 실행, 저장소 시크릿 `ANTHROPIC_API_KEY`)로 돌리면 결과가 `eval/llm-<실행 번호>.<시도>` 브랜치로 올라와 PR로 검토합니다.
+
 | 추출기 | 정밀도 | 재현율 | 금액 | 연도 | 발언 강도 | 분야 | 청크당 비용 | 지연 p50 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | 규칙 기반 | 92.0% | 46.0% | 78.3% | 91.3% | 82.6% | 82.6% | $0 | – |
@@ -170,11 +172,10 @@ flowchart LR
 | Haiku 4.5 | 100% | 92.0% | 100% | 97.8% | 91.3% | 76.1% | $0.0046 | 3.4초 |
 
 - **측정이 버그를 찾았습니다.** 첫 실행([LLM eval #2](https://github.com/sokldjs554/procurement-forecast/actions/runs/36156552633))에서 "2억 8천 정도"를 Claude는 모두 2억 8천만 원으로 맞혔는데, 금액 파서가 200,008,000으로 읽어 검증기가 맞는 답을 틀린 값으로 덮어썼습니다(저장 금액 정확도 98%). 파서를 고치고([#10](https://github.com/sokldjs554/procurement-forecast/pull/10)) 다시 돌려 100%가 됐고, 규칙 기반 추출기의 금액 정확도도 73.9% → 78.3%로 올랐습니다.
-- **effort는 low 유지**: medium은 비용만 조금 늘고 나아진 필드가 없습니다. 분야 정확도는 같은 설정으로 두 번 돌려도 86~90% 사이에서 흔들려, 50건 규모에서 1~2건 차이는 우열로 읽지 않습니다.
-- **더 싼 모델**: Sonnet 5 low는 비용 39%에 재현율이 1건(거절 발언 하나) 낮습니다. Haiku 4.5는 토큰 단가가 싸지만 시스템 프롬프트(약 1,400토큰)가 Haiku의 캐시 최소 길이(4,096토큰)보다 짧아 캐시가 전혀 안 걸려(Opus·Sonnet은 입력의 92%가 캐시 읽기) Sonnet보다 비쌉니다. 선택 기준은 [ADR-0006](docs/adr/0006-one-model-low-effort.md).
+- **effort는 low 유지**: medium은 비용만 조금 늘고 나아진 필드가 없습니다. 분야 정확도는 같은 설정으로 다시 돌리면 2~6%p 달라졌습니다(실행 #2 → #3: Opus low 88 → 86%, Opus medium 86 → 90%, Haiku 82 → 76%, [#2 보고서](https://github.com/sokldjs554/procurement-forecast/blob/eval/llm-2.1/docs/evaluation-llm.md)). 그래서 50건 규모에서 1~2건 차이는 우열로 읽지 않습니다.
+- **더 싼 모델**: Sonnet 5 low는 비용 39%에 재현율이 1건 낮습니다(r35: 무인 대출기 추가 요청에 구청이 "당분간 계획이 없다"고 한 거절 발언, 두 실행 모두). Haiku 4.5는 토큰 단가가 싸지만 시스템 프롬프트(약 1,400토큰)가 Haiku의 캐시 최소 길이(4,096토큰)보다 짧아 캐시가 전혀 안 걸려(Opus·Sonnet은 입력의 92%가 캐시 읽기) Sonnet보다 비쌉니다. 선택 기준은 [ADR-0006](docs/adr/0006-one-model-low-effort.md).
 - **가장 약한 필드는 분야 분류**입니다. 틀린 사례 대부분이 "AI 민원상담 챗봇 → AI·데이터(정답: 공공 SW)"처럼 용도가 아니라 기술 단어로 분류한 경우입니다. 같은 세트로 프롬프트를 고치면 이 세트에만 맞추게 되므로, 새 사례를 따로 모은 뒤 고칩니다.
 - 수기 세트는 이 저장소에서 직접 작성한 문장이라 실제 회의록의 분포와 다릅니다. 두 번 실행한 비용은 합계 $3.30입니다.
-- **Claude 모델 비교**: `make eval-llm`이 같은 수기 세트를 규칙 기반·Opus 5(low·medium)·Sonnet 5(low)·Haiku 4.5로 돌려 정밀도·재현율·필드 정확도(검증기 통과 후), 검증기가 버리거나 고친 신호 수, 건당·1,000건당 비용, 지연 p50/p95를 [docs/evaluation-llm.md](docs/evaluation-llm.md)에 씁니다. API 키가 필요하고 한 번에 약 5달러이며(`--dry-run`으로 먼저 추정), `--max-usd`를 넘으면 호출을 멈춥니다. 로컬 대신 GitHub Actions의 **LLM eval** 워크플로(수동 실행, 저장소 시크릿 `ANTHROPIC_API_KEY`)로 돌리면 결과가 `eval/llm-<실행 번호>.<시도>` 브랜치(예: `eval/llm-3.1`)로 올라와 PR로 검토합니다.
 
 ## 대용량 쿼리
 
