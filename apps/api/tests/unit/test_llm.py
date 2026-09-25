@@ -361,9 +361,11 @@ def test_template_brief_reads_like_a_person_wrote_it() -> None:
 def test_template_brief_does_not_forecast_a_window_that_has_passed() -> None:
     from app.pipeline.brief import template_brief
 
-    stale = template_brief(_brief_facts("budget_line", "committed", today=date(2027, 1, 5)))
+    facts = _brief_facts("budget_line", "committed", today=date(2027, 1, 5), window_passed=True)
+    stale = template_brief(facts)
     assert "예상했던 입찰 시기(2026년 9~11월)가 지났는데 아직 공고는 안 나왔어요." in stale
     assert "나올 것으로 보고 있어요" not in stale
+    assert "2026-11-30 (이 기간이 지났지만 아직 입찰공고 없음)" in facts.as_prompt()
 
 
 def test_a_quote_that_spans_lines_keeps_its_signal() -> None:

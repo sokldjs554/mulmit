@@ -262,6 +262,25 @@ def test_ranker_prefers_actionable_lead_time() -> None:
     assert early.breakdown["keyword_hits"] == ["스마트쉘터"]
 
 
+def test_ranker_does_not_call_a_missed_window_imminent() -> None:
+    today = date(2026, 9, 25)
+    inside = score_opportunity(
+        _opp(bid_window_start=date(2026, 1, 15), bid_window_end=date(2026, 11, 30)),
+        _profile(),
+        "11680",
+        today,
+    )
+    missed = score_opportunity(
+        _opp(bid_window_start=date(2026, 1, 15), bid_window_end=date(2026, 3, 31)),
+        _profile(),
+        "11680",
+        today,
+    )
+    assert inside.breakdown["features"]["lead_time"] == 0.75
+    assert missed.breakdown["features"]["lead_time"] == 0.35
+    assert missed.score < inside.score
+
+
 def test_ranker_excluded_keywords_bury_result() -> None:
     today = date(2026, 9, 25)
     normal = score_opportunity(_opp(), _profile(), None, today)

@@ -37,6 +37,7 @@ export function formatMonth(iso: string | null | undefined): string {
 export function formatWindow(start: string | null, end: string | null): string {
   if (!start) return "미정";
   if (!end || start === end) return formatDate(start);
+  if (formatMonth(start) === formatMonth(end)) return formatMonth(start);
   return `${formatMonth(start)} ~ ${formatMonth(end)}`;
 }
 

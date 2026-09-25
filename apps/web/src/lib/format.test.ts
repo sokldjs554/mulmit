@@ -32,6 +32,7 @@ describe("timing labels", () => {
   it("collapses a single-day window and shows month ranges otherwise", () => {
     expect(formatWindow("2027-03-01", "2027-03-01")).toBe("2027.03.01");
     expect(formatWindow("2027-03-01", "2027-06-30")).toBe("2027.03 ~ 2027.06");
+    expect(formatWindow("2026-11-05", "2026-11-30")).toBe("2026.11"); // what is left of a window
     expect(formatWindow(null, null)).toBe("미정");
   });
 

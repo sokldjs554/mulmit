@@ -92,11 +92,15 @@ async def _best_evidence(session: AsyncSession, opp_id: int) -> tuple[str | None
 
 
 async def build_items(
-    session: AsyncSession, recs: list[tuple[Recommendation, Opportunity]], web_url: str
+    session: AsyncSession,
+    recs: list[tuple[Recommendation, Opportunity]],
+    web_url: str,
+    *,
+    today: date | None = None,
 ) -> list[dict[str, Any]]:
     names = dict((await session.execute(select(InstitutionRow.code, InstitutionRow.name))).all())
     items = []
-    today = today_kst()
+    today = today or today_kst()
     for rec, opp in recs:
         quote, note = await _best_evidence(session, opp.id)
         items.append(
@@ -178,7 +182,7 @@ async def enqueue_alerts(
     batches = [[pair] for pair in fresh[:20]] if rule.mode == "instant" else [fresh[:15]]
     more = 0 if rule.mode == "instant" else max(len(fresh) - 15, 0)
     for batch in batches:
-        items = await build_items(session, batch, web_url)
+        items = await build_items(session, batch, web_url, today=today_kst(now))
         local = now.astimezone(KST)
         headline = (
             f"{items[0]['institution']} · {items[0]['title']}"

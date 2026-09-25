@@ -30,6 +30,7 @@ from app.clock import today_kst
 from app.db.models import CompanyProfile, InstitutionRow, Opportunity, Recommendation
 from app.domain.embedding import cosine
 from app.domain.text import to_jamo
+from app.domain.timing import remaining_window
 from app.log import get_logger
 
 log = get_logger(__name__)
@@ -75,9 +76,13 @@ def _lead_time_value(opp: Opportunity, today: date) -> tuple[float, int | None]:
         return 0.6, 0
     if opp.status in ("closed", "dormant") or opp.bid_window_start is None:
         return 0.0, None
-    days = (opp.bid_window_start - today).days
-    if days < 0:  # window already started, tender imminent
-        return 0.75, max(days, 0)
+    start, _, passed = remaining_window(opp.bid_window_start, opp.bid_window_end, today)
+    if passed:  # the forecast window closed with no tender: late, not imminent
+        return 0.35, None
+    assert start is not None
+    days = (start - today).days
+    if days == 0:  # inside the window, tender due any day
+        return 0.75, 0
     # Sweet spot: 2–9 months to engage before the RFP is written.
     if days <= 60:
         return 0.7 + 0.3 * days / 60, days

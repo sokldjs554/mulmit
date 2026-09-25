@@ -1,9 +1,12 @@
 from collections.abc import AsyncIterator
+from datetime import timedelta
+from typing import Any
 
 import httpx
 import pytest
 
 from app.api.app import create_app
+from app.clock import today_kst
 from app.settings import get_settings
 
 
@@ -184,9 +187,14 @@ async def test_every_sort_pages_through_the_whole_feed_once(
         keys = [c["last_signal_at"] for c in seen]
         assert keys == sorted(keys, reverse=True)
     if sort == "soon":
-        # windows that already opened show from today, so the displayed start is the sort key
-        # within the same day the better fit comes first
-        pairs = [(c["bid_window_start"] or "9999-12-31", -c["score"]) for c in seen]
+        # the key is when the tender is due: an open window shows from today, a missed one
+        # counts as today too; within the same day the better fit comes first
+        today = today_kst().isoformat()
+
+        def due(c: dict[str, Any]) -> str:
+            return today if c["window_passed"] else (c["bid_window_start"] or "9999-12-31")
+
+        pairs = [(due(c), -c["score"]) for c in seen]
         assert pairs == sorted(pairs)
     wrong = await client.get(
         "/api/opportunities", params={**params, "sort": "score", "cursor": first["next_cursor"]}
@@ -204,3 +212,33 @@ async def test_stage_counts_ignore_the_stage_filter(client: httpx.AsyncClient) -
     ).json()
     assert one["stage_counts"] == counts
     assert one["total"] == counts["council_mention"]
+
+
+async def test_a_soon_cursor_survives_midnight(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.api.routers import opportunities
+
+    await _login(client, "demo@example.com", "demo-pass-1234")
+    params: dict[str, str | int] = {"limit": 5, "sort": "soon", "status": "open"}
+    first = (await client.get("/api/opportunities", params=params)).json()
+    tomorrow = today_kst() + timedelta(days=1)
+    monkeypatch.setattr(opportunities, "today_kst", lambda: tomorrow)
+    second = (
+        await client.get("/api/opportunities", params={**params, "cursor": first["next_cursor"]})
+    ).json()
+    assert second["items"]
+    assert not {c["id"] for c in first["items"]} & {c["id"] for c in second["items"]}
+
+
+async def test_a_cursor_from_before_sort_options_still_pages(client: httpx.AsyncClient) -> None:
+    import base64
+    import json
+
+    await _login(client, "demo@example.com", "demo-pass-1234")
+    first = (await client.get("/api/opportunities", params={"limit": 3})).json()
+    last = first["items"][-1]
+    old = base64.urlsafe_b64encode(json.dumps([last["score"], last["id"]]).encode()).decode()
+    resp = await client.get("/api/opportunities", params={"limit": 3, "cursor": old})
+    assert resp.status_code == 200 and resp.json()["items"]
+    assert not {c["id"] for c in first["items"]} & {c["id"] for c in resp.json()["items"]}

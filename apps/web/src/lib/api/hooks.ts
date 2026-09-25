@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-query";
 
 import { api, newIdempotencyKey, unwrap, type Schemas } from "./client";
+import type { operations } from "./schema";
 
 export const qk = {
   me: ["me"] as const,
@@ -77,7 +78,9 @@ export function useLogout() {
 }
 
 // --- feed & opportunities ----------------------------------------------------------------------
-export type FeedSort = "score" | "soon" | "recent";
+export type FeedSort = NonNullable<
+  NonNullable<operations["feed_api_opportunities_get"]["parameters"]["query"]>["sort"]
+>;
 
 export type FeedFilters = {
   stage?: string[];

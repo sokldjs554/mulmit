@@ -39,9 +39,7 @@ export function HeadStart({ detail }: { detail: Schemas["OpportunityDetail"] }) 
           {first ? `처음 잡힌 건 ${formatDate(first.observed_at)}${source ? `, ${source}` : ""}에서였어요. ` : null}
           {published
             ? `입찰공고는 ${formatDate(detail.bid_published_at)}에 나왔어요.`
-            : detail.window_passed
-              ? "예상했던 입찰 시기는 지났는데, 아직 공고는 안 나왔어요."
-              : `입찰은 ${formatMonth(detail.bid_window_start)}쯤으로 보고 있어요.`}
+            : `입찰은 ${formatMonth(detail.bid_window_start)}쯤으로 보고 있어요.`}
         </p>
       </div>
     </div>

@@ -42,27 +42,25 @@ def _sort_key(
     return Recommendation.score, False
 
 
-def _key_value(sort: FeedSort, rec: Recommendation, opp: Opportunity, today: date) -> Any:
-    # must equal what _sort_key computes in SQL for the same row
-    if sort == "soon":
-        return max(opp.bid_window_start or date.max, today)
-    if sort == "recent":
-        return opp.last_signal_at
-    return rec.score
-
-
-def _encode_cursor(sort: FeedSort, value: Any, score: float, opp_id: int) -> str:
+def _encode_cursor(sort: FeedSort, value: Any, score: float, opp_id: int, day: date) -> str:
     raw = value.isoformat() if isinstance(value, date) else value
-    return base64.urlsafe_b64encode(json.dumps([sort, raw, score, opp_id]).encode()).decode()
+    payload = [sort, raw, score, opp_id, day.isoformat()]
+    return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
 
 
-def _decode_cursor(cursor: str, sort: FeedSort) -> tuple[Any, float, int]:
+def _decode_cursor(cursor: str, sort: FeedSort) -> tuple[Any, float, int, date | None]:
+    """(key, score, id, day the first page was served). The day pins "soon", whose key depends
+    on today, so a page fetched after midnight continues the same ordering."""
     try:
-        cursor_sort, raw, score, opp_id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        parts = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        if len(parts) == 2 and sort == "score":  # issued before there were sort options
+            score, opp_id = parts
+            return float(score), float(score), int(opp_id), None
+        cursor_sort, raw, score, opp_id, day = parts
         if cursor_sort != sort:
             raise ValueError("cursor from another sort order")
         value = float(raw) if sort == "score" else date.fromisoformat(raw)
-        return value, float(score), int(opp_id)
+        return value, float(score), int(opp_id), date.fromisoformat(day)
     except (ValueError, TypeError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid cursor") from exc
 
@@ -115,16 +113,20 @@ async def feed(
         else sum(stage_counts.values())
     )
     today = today_kst()
-    key, ascending = _sort_key(sort, today)
+    c_value = c_score = c_id = None
+    day = today
+    if cursor:
+        c_value, c_score, c_id, c_day = _decode_cursor(cursor, sort)
+        day = c_day or today
+    key, ascending = _sort_key(sort, day)
     # Ties on the sort key (every window already open counts as "today") go to the better fit.
     order = [
         key.asc() if ascending else key.desc(),
         Recommendation.score.desc(),
         Opportunity.id.desc(),
     ]
-    page_q = base
+    page_q = base.add_columns(key.label("sort_key"))
     if cursor:
-        c_value, c_score, c_id = _decode_cursor(cursor, sort)
         beyond = key > c_value if ascending else key < c_value
         after_tie = or_(
             Recommendation.score < c_score,
@@ -133,13 +135,11 @@ async def feed(
         page_q = page_q.where(or_(beyond, and_(key == c_value, after_tie)))
     rows = (await session.execute(page_q.order_by(*order).limit(limit + 1))).all()
     names = await institution_names(session)
-    items = [card(opp, names, rec, today) for rec, opp in rows[:limit]]
+    items = [card(opp, names, rec, today) for rec, opp, _ in rows[:limit]]
     next_cursor = None
     if len(rows) > limit:
-        last_rec, last_opp = rows[limit - 1]
-        next_cursor = _encode_cursor(
-            sort, _key_value(sort, last_rec, last_opp, today), last_rec.score, last_opp.id
-        )
+        last_rec, last_opp, last_key = rows[limit - 1]
+        next_cursor = _encode_cursor(sort, last_key, last_rec.score, last_opp.id, day)
     return FeedPage(items=items, next_cursor=next_cursor, total=total, stage_counts=stage_counts)
 
 

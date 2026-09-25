@@ -131,11 +131,11 @@ async def build_facts(
     ).all()
     profile = await session.get(CompanyProfile, org_id)
     today = today or today_kst()
-    window_start, window_end = opp.bid_window_start, opp.bid_window_end
-    if not opp.bid_published_at:
-        start, end, passed = remaining_window(window_start, window_end, today)
-        if not passed:
-            window_start, window_end = start, end
+    window_start, window_end, passed = remaining_window(
+        opp.bid_window_start, opp.bid_window_end, today, published=opp.bid_published_at
+    )
+    if passed:  # keep the forecast that was missed, flagged, rather than a shifted one
+        window_start, window_end = opp.bid_window_start, opp.bid_window_end
     return BriefFacts(
         today=today,
         title=opp.title,
@@ -149,6 +149,7 @@ async def build_facts(
         bid_published_at=opp.bid_published_at,
         best_commitment=opp.best_commitment,
         conversion_prob=opp.conversion_prob,
+        window_passed=passed,
         signals=tuple(
             BriefSignal(
                 observed_at=s.observed_at,
@@ -185,11 +186,10 @@ def template_brief(facts: BriefFacts) -> str:
     who = " ".join(x for x in (facts.institution, facts.department) if x)
     stage_label = STAGE_LABEL[facts.stage]
     span = month_span(facts.window_start, facts.window_end) if facts.window_start else None
-    last_day = facts.window_end or facts.window_start
     if facts.bid_published_at:
         timing = f"입찰공고는 {_dot(facts.bid_published_at)}에 나왔어요."
         when = f"- 입찰공고: {_dot(facts.bid_published_at)}"
-    elif span and last_day and last_day < facts.today:
+    elif span and facts.window_passed:
         timing = f"예상했던 입찰 시기({span})가 지났는데 아직 공고는 안 나왔어요."
         when = f"- 입찰 예상 시기: {span} (지났지만 아직 공고 없음)"
     elif span:

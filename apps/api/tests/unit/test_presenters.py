@@ -3,6 +3,8 @@ from datetime import date
 from app.api.presenters import head_start_days
 from app.db.models import Opportunity
 
+TODAY = date(2026, 1, 1)
+
 
 def _opp(first: date, *, published: date | None = None, window: date | None = None) -> Opportunity:
     return Opportunity(first_seen_at=first, bid_published_at=published, bid_window_start=window)
@@ -10,16 +12,35 @@ def _opp(first: date, *, published: date | None = None, window: date | None = No
 
 def test_head_start_runs_to_the_actual_tender_when_there_is_one() -> None:
     opp = _opp(date(2025, 8, 9), published=date(2026, 9, 5), window=date(2026, 9, 5))
-    assert head_start_days(opp) == 392
+    assert head_start_days(opp, date(2026, 9, 25)) == 392
 
 
 def test_head_start_runs_to_the_forecast_window_before_the_tender() -> None:
-    assert head_start_days(_opp(date(2025, 11, 20), window=date(2026, 6, 1))) == 193
+    assert head_start_days(_opp(date(2025, 11, 20), window=date(2026, 6, 1)), TODAY) == 193
 
 
 def test_no_head_start_when_the_tender_was_the_first_signal_or_nothing_is_forecast() -> None:
-    assert head_start_days(_opp(date(2026, 9, 5), published=date(2026, 9, 5))) is None
-    assert head_start_days(_opp(date(2026, 1, 5))) is None
+    assert head_start_days(_opp(date(2026, 9, 5), published=date(2026, 9, 5)), TODAY) is None
+    assert head_start_days(_opp(date(2026, 1, 5)), TODAY) is None
+
+
+def test_head_start_follows_the_window_as_shown() -> None:
+    first = date(2025, 6, 1)
+    opened = Opportunity(
+        first_seen_at=first,
+        bid_published_at=None,
+        bid_window_start=date(2026, 1, 15),
+        bid_window_end=date(2026, 11, 30),
+    )
+    missed = Opportunity(
+        first_seen_at=first,
+        bid_published_at=None,
+        bid_window_start=date(2026, 1, 15),
+        bid_window_end=date(2026, 3, 31),
+    )
+    today = date(2026, 9, 25)
+    assert head_start_days(opened, today) == (today - first).days  # counted to today, as shown
+    assert head_start_days(missed, today) is None  # no head start to claim on a missed forecast
 
 
 def test_a_window_that_has_opened_is_shown_from_today() -> None:

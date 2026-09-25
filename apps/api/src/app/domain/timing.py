@@ -84,13 +84,16 @@ def month_span(start: date, end: date | None = None) -> str:
 
 
 def remaining_window(
-    start: date | None, end: date | None, today: date
+    start: date | None, end: date | None, today: date, *, published: date | None = None
 ) -> tuple[date | None, date | None, bool]:
     """What is left of a forecast window as of ``today``: (start, end, passed).
 
-    A window that has already opened without a tender starts today — "2026년 1~11월" read in
-    September means "any day until November". A window that has closed stays as it was and is
-    flagged, so it is shown as overdue rather than as a live forecast."""
+    Once the tender is out, that date is the window. A window that has already opened without a
+    tender starts today — "2026년 1~11월" read in September means "any day until November". A
+    window that has closed stays as it was and is flagged, so it is shown as overdue rather than
+    as a live forecast."""
+    if published is not None:
+        return published, published, False
     if start is None:
         return None, None, False
     last = end or start
