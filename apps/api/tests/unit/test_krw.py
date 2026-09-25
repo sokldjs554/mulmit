@@ -30,6 +30,11 @@ from app.domain.krw import (
         ("1조 2천", 1_200_000_000_000),
         ("5만 3천원", 53_000),  # after 만 the tail is literal
         ("3억 5천만원을 편성", 350_000_000),  # explicit 만 unchanged
+        # written amounts (ending in 원) are exact, however the tail is spelled
+        ("금 일억이천삼백원정", 100_002_300),
+        ("2억 3천원", 200_003_000),
+        ("2억 8천 5백원", 200_008_500),
+        ("2억 8천500원", 200_008_500),
     ],
 )
 def test_parse_krw_spoken_and_written_forms(text: str, expected: int) -> None:

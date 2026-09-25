@@ -15,7 +15,8 @@ on all of them because it is the referee that checks the LLM's ``budget_krw`` ag
 The algorithm is the usual positional one: small units (십/백/천) accumulate into a section,
 large units (만/억/조) flush the section into the total. One spoken convention on top: a trailing
 section made of small units right after 억 or 조 counts in the next unit down (억 → 만, 조 → 억),
-because nobody says "2억 8천" meaning 200,008,000.
+because nobody says "2억 8천" meaning 200,008,000. Amounts ending in 원 are written, not spoken,
+and stay exact ("금 일억이천삼백원" → 100,002,300).
 """
 
 from __future__ import annotations
@@ -72,7 +73,8 @@ def _to_decimal(token: str) -> Decimal | None:
         return None
 
 
-def _evaluate(body: str) -> int | None:
+def _evaluate(body: str, *, spoken: bool = True) -> int | None:
+    """``spoken=False`` for spans ending in 원: written amounts ("금 일억이천삼백원") are exact."""
     total = Decimal(0)
     section = Decimal(0)
     pending: Decimal | None = None
@@ -99,7 +101,7 @@ def _evaluate(body: str) -> int | None:
             if pending is not None:  # two numbers in a row: "3억 5000" -> keep adding
                 section += pending
             pending = number
-    if section and pending is None and last_large >= _LARGE["억"]:
+    if spoken and section and pending is None and last_large >= _LARGE["억"]:
         section *= last_large // _LARGE["만"]  # "2억 8천" → 8천만, "1조 2천" → 2천억
     total += section + (pending if pending is not None else Decimal(0))
     if not saw_unit and total == 0:
@@ -139,7 +141,7 @@ def find_amounts(
         # otherwise "일부", "이천" (a city) etc. would parse as numbers.
         if re.match(_HNUM, body) and not (m.group("won") and re.search("[만억조]", body)):
             continue
-        value_int = _evaluate(body)
+        value_int = _evaluate(body, spoken=not m.group("won"))
         if value_int is None:
             continue
         if not m.group("won") and not re.search("[만억조]", body):
