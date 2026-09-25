@@ -18,6 +18,8 @@ make gen-api                    # FastAPI 스키마가 바뀌면 반드시 실�
 ## 규칙
 - 파이프라인·파서·프롬프트·연결·랭킹을 바꾸면 `manage eval all` 전후 수치를 PR에 적습니다. CI 품질 게이트(추출·연결 P/R ≥ 0.95 등)를 낮추지 마세요.
 - **정답 누수 금지**: 합성 레코드의 `structured["truth_id"]` 등 평가용 필드는 파이프라인 코드에서 읽지 않습니다.
+- 쿼리·인덱스를 바꾸면 `make bench`로 운영 규모에서 실행 계획을 확인하고 `docs/performance.md`를 갱신합니다. 데모 규모에서는 모든 쿼리가 순차 스캔이라 문제가 보이지 않습니다.
+- 크롤러는 robots.txt와 호스트별 속도 제한을 우회하지 않습니다.
 - LLM 출력은 반드시 `domain/grounding.py` 검증을 거칩니다. 검증을 우회하는 경로를 만들지 마세요.
 - 시간은 `app.clock`(`now_utc`, `today_kst`, `KST`)으로. `date.today()`·naive datetime 금지.
 - 금액은 원 단위 `int`. 파싱은 `domain/krw.py`만 사용.

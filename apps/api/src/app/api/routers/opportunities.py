@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
-from sqlalchemy import and_, any_, func, literal, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from app.api.deps import PrincipalDep, RuntimeDep, SessionDep
 from app.api.presenters import card, institution_names, signals_for_opportunity
@@ -58,9 +58,7 @@ async def feed(
         conds.append(Opportunity.category.in_(category))
     conds.append(Opportunity.status.in_(status_ or ["open", "bid_open"]))
     if q:
-        conds.append(
-            or_(Opportunity.title.ilike(f"%{q}%"), literal(q) == any_(Opportunity.keywords))
-        )
+        conds.append(or_(Opportunity.title.ilike(f"%{q}%"), Opportunity.keywords.contains([q])))
     if not include_dismissed:
         conds.append(
             or_(

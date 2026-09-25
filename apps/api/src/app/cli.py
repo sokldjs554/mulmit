@@ -4,6 +4,7 @@ manage db upgrade                 # alembic upgrade head
 manage seed [--anchor 2026-09-25] # institutions, sources, demo tenants
 manage demo run                   # full pipeline over the synthetic world, in-process
 manage eval all --record          # extraction / linking / OCR / realistic-set evals
+manage bench --report ../../docs/performance.md   # hot-query plans at volume
 manage worker                     # arq worker + cron (+ /healthz on $PORT for Cloud Run)
 manage openapi > openapi.json     # schema for the web app's generated types
 """
@@ -140,6 +141,21 @@ def eval_all(
         return await run_all_evals(session, runtime, record=record, report_path=report)
 
     results = _run(lambda: _with_session(go))
+    typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
+
+
+@app.command()
+def bench(
+    scale: float = typer.Option(1.0, help="Multiply the default row counts"),
+    report: Path = typer.Option(Path("performance.md"), help="Markdown report to write"),
+) -> None:
+    """Load a throwaway <db>_bench at production-like volume and compare hot query plans
+    between the initial schema and head (see docs/performance.md)."""
+    from app.bench import SIZES, run_bench
+
+    configure_logging(json=False, level="WARNING")
+    sizes = {k: max(1, int(v * scale)) for k, v in SIZES.items()}
+    results = _run(lambda: run_bench(sizes, report, log=typer.echo))
     typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
 
 

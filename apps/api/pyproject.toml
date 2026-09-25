@@ -80,6 +80,7 @@ ignore = [
 "src/app/sources/resilience.py" = ["S105"]  # a Lua script constant, not a password
 "migrations/**" = ["E501"]
 "src/app/demo/**" = ["S311"]  # synthetic data uses non-crypto RNG on purpose
+"src/app/bench.py" = ["S608"]  # benchmark SQL is assembled from module constants only
 
 [tool.mypy]
 python_version = "3.11"
@@ -90,7 +91,7 @@ packages = ["app"]
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["arq.*", "pgvector.*", "olefile.*", "pypdfium2.*", "reportlab.*"]
+module = ["arq.*", "pgvector.*", "olefile.*", "pypdfium2.*", "reportlab.*", "asyncpg", "asyncpg.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
