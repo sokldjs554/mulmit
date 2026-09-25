@@ -7,9 +7,14 @@ reviewer can see the pipeline work end to end without a queue, cron or API keys.
 
 from __future__ import annotations
 
+import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from datetime import time as dtime
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -22,6 +27,7 @@ from app.billing.service import (
     ensure_subscription,
     register_card,
 )
+from app.clock import KST
 from app.db.models import (
     AlertChannel,
     AlertRule,
@@ -29,12 +35,16 @@ from app.db.models import (
     Document,
     EvalRun,
     InstitutionRow,
+    JobRun,
     Organization,
     Signal,
     Source,
     User,
 )
+from app.db.session import session_scope
 from app.log import get_logger
+from app.notify.channels import build_channels
+from app.notify.dispatch import deliver_pending, enqueue_alerts
 from app.pipeline.backtest import run_backtest
 from app.pipeline.ingest import run_ingest
 from app.pipeline.link import link_signals
@@ -225,16 +235,72 @@ class DemoReport:
     opportunities: int = 0
     needs_review: int = 0
     degraded: int = 0
+    notifications: dict[str, int] = field(default_factory=dict)
     backtest: dict[str, Any] = field(default_factory=dict)
 
 
-async def run_demo_pipeline(session: AsyncSession, runtime: Runtime, *, anchor: date) -> DemoReport:
+@asynccontextmanager
+async def _job(name: str, **args: Any) -> AsyncIterator[dict[str, Any]]:
+    """Record a demo step as a job run under the worker's job name, so the operator console
+    shows what the demo executed. Like ``worker.tasks.tracked``, the row lives in its own
+    transactions: a step that fails and rolls back its work still leaves a "failed" row."""
+    async with session_scope() as s:
+        run = JobRun(job=name, job_id=f"demo:{name}:{uuid4().hex[:8]}", status="running", args=args)
+        s.add(run)
+        await s.flush()
+        run_id = run.id
+    started = time.perf_counter()
+    result: dict[str, Any] = {}
+    status, error = "succeeded", None
+    try:
+        yield result
+    except Exception as exc:
+        status, error = "failed", f"{type(exc).__name__}: {exc}"[:4000]
+        raise
+    finally:
+        async with session_scope() as s:
+            row = await s.get(JobRun, run_id)
+            if row is not None:
+                row.status, row.error = status, error
+                row.finished_at = datetime.now(UTC)
+                row.duration_ms = int((time.perf_counter() - started) * 1000)
+                row.result = {
+                    k: v for k, v in result.items() if isinstance(v, (int, float, str, bool))
+                }
+
+
+async def send_morning_digest(
+    session: AsyncSession, runtime: Runtime, org_ids: list[int], *, anchor: date
+) -> dict[str, int]:
+    """The 08:00 KST digest on the anchor day, through the same code as the worker's daily
+    cron, handed to the configured channels (Mailpit in `make infra` and docker compose). With
+    no mail server running it stays pending for retry — the demo doesn't pretend it was sent."""
+    morning = datetime.combine(anchor, dtime(8, 0), tzinfo=KST).astimezone(UTC)
+    web_url = runtime.settings.public_web_url
+    for org_id in org_ids:
+        async with _job("enqueue_alerts", org_id=org_id, mode="daily") as job:
+            job["notifications"] = await enqueue_alerts(
+                session, org_id, web_url=web_url, mode_filter="daily", now=morning
+            )
+    await session.commit()
+    async with _job("deliver_notifications") as job:
+        stats = await deliver_pending(session, build_channels(runtime.settings), now=morning)
+        job.update(stats)
+    await session.commit()
+    return stats
+
+
+async def run_demo_pipeline(
+    session: AsyncSession, runtime: Runtime, *, anchor: date, digest: bool = True
+) -> DemoReport:
     report = DemoReport()
     sources = (await session.scalars(select(Source).where(Source.key.like("fixture_%")))).all()
     window = FetchWindow(anchor - timedelta(days=365 * 4), anchor)
     doc_ids: list[int] = []
     for src in sources:
-        stats = await run_ingest(session, src, build_adapter(src, runtime), runtime, window)
+        async with _job("ingest_source", source=src.key) as job:
+            stats = await run_ingest(session, src, build_adapter(src, runtime), runtime, window)
+            job.update(fetched=stats.fetched, changed=len(stats.changed_ids))
         doc_ids += stats.changed_ids
     await session.commit()
     report.documents = len(doc_ids)
@@ -242,7 +308,9 @@ async def run_demo_pipeline(session: AsyncSession, runtime: Runtime, *, anchor: 
     docs = (await session.scalars(select(Document).where(Document.id.in_(doc_ids)))).all()
     signal_ids: list[int] = []
     for i, doc in enumerate(sorted(docs, key=lambda d: d.published_at)):
-        result = await process_document(session, runtime, doc.id)
+        async with _job("process_document", document_id=doc.id) as job:
+            result = await process_document(session, runtime, doc.id)
+            job.update(signals=len(result.signal_ids), needs_review=result.needs_review)
         signal_ids += result.signal_ids
         report.needs_review += result.needs_review
         report.degraded += result.degraded
@@ -252,10 +320,14 @@ async def run_demo_pipeline(session: AsyncSession, runtime: Runtime, *, anchor: 
     await session.commit()
     report.signals = len(signal_ids)
 
-    touched = await link_signals(session, runtime, signal_ids, today=anchor)
+    async with _job("link_signals", signals=len(signal_ids)) as job:
+        touched = await link_signals(session, runtime, signal_ids, today=anchor)
+        job.update(opportunities=len(touched))
     await session.commit()
     report.opportunities = len(touched)
-    metrics = await run_backtest(session, today=anchor)
+    async with _job("nightly_backtest") as job:
+        metrics = await run_backtest(session, today=anchor)
+        job.update(tenders=(metrics.get("tender_early_coverage") or {}).get("tenders", 0))
     session.add(
         EvalRun(
             kind="backtest",
@@ -273,9 +345,15 @@ async def run_demo_pipeline(session: AsyncSession, runtime: Runtime, *, anchor: 
 
         for opp in (await session.scalars(select(Opportunity))).all():
             await refresh_opportunity(session, opp, today=anchor, calibration=calibration)
-    for org_id in (await session.scalars(select(Organization.id))).all():
-        await refresh_recommendations(session, org_id, today=anchor)
+    org_ids = list((await session.scalars(select(Organization.id))).all())
+    for org_id in org_ids:
+        async with _job("refresh_recommendations", org_id=org_id) as job:
+            scored = await refresh_recommendations(session, org_id, today=anchor)
+            job.update(recommendations=len(scored))
     await session.commit()
+
+    if digest:
+        report.notifications = await send_morning_digest(session, runtime, org_ids, anchor=anchor)
     return report
 
 

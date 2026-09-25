@@ -1,8 +1,10 @@
-from datetime import date
+from datetime import UTC, date, datetime
 
+import pytest
 from sqlalchemy import func, select
 
 from app.db.models import (
+    JobRun,
     Opportunity,
     OpportunitySignal,
     Recommendation,
@@ -117,3 +119,54 @@ async def test_job_cancelled_by_shutdown_is_recorded_as_retrying(demo_world) -> 
     assert run is not None
     assert run.status == "retrying"
     assert run.finished_at is not None
+
+
+async def test_demo_run_leaves_job_history(demo_world) -> None:  # type: ignore[no-untyped-def]
+    async with session_scope() as s:
+        demo = JobRun.job_id.like("demo:%")  # other tests in this database run jobs too
+        jobs = dict(
+            (
+                await s.execute(select(JobRun.job, func.count()).where(demo).group_by(JobRun.job))
+            ).all()
+        )
+        assert jobs.get("process_document", 0) >= demo_world.documents
+        assert jobs.get("link_signals", 0) >= 1 and jobs.get("refresh_recommendations", 0) >= 1
+        running = select(JobRun).where(demo, JobRun.status == "running")
+        assert not (await s.scalars(running)).all()
+
+
+async def test_a_failed_demo_step_is_still_recorded(demo_world) -> None:  # type: ignore[no-untyped-def]
+    from app.demo.seed import _job
+
+    with pytest.raises(RuntimeError):
+        async with _job("link_signals", signals=3):
+            raise RuntimeError("linker blew up")
+    async with session_scope() as s:
+        row = await s.scalar(select(JobRun).where(JobRun.error == "RuntimeError: linker blew up"))
+        assert row is not None and row.status == "failed" and row.finished_at is not None
+
+
+async def test_demo_digest_goes_out_at_eight_kst_through_the_daily_path(
+    demo_world,
+    runtime,
+    monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
+) -> None:
+    from app.demo import seed
+
+    calls: list[tuple[int, str | None, datetime]] = []
+
+    async def fake_enqueue(_s, org_id, *, web_url, mode_filter=None, now=None):  # type: ignore[no-untyped-def]
+        calls.append((org_id, mode_filter, now))
+        return 1
+
+    async def fake_deliver(_s, channels, *, now=None, limit=100):  # type: ignore[no-untyped-def]
+        assert set(channels) == {"email", "slack", "kakao"}
+        return {"sent": len(calls), "retry": 0, "failed": 0, "deferred": 0}
+
+    monkeypatch.setattr(seed, "enqueue_alerts", fake_enqueue)
+    monkeypatch.setattr(seed, "deliver_pending", fake_deliver)
+    async with session_scope() as s:
+        stats = await seed.send_morning_digest(s, runtime, [1, 2], anchor=date(2026, 9, 25))
+    assert stats["sent"] == 2
+    assert {(org, mode) for org, mode, _ in calls} == {(1, "daily"), (2, "daily")}
+    assert {now for _, _, now in calls} == {datetime(2026, 9, 24, 23, 0, tzinfo=UTC)}  # 08:00 KST

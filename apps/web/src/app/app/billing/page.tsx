@@ -132,7 +132,7 @@ function Plans({ billing }: { billing: Billing }) {
             </ul>
             <Button
               className="mt-5"
-              variant={isCurrent ? "secondary" : "primary"}
+              variant={isCurrent || !plan.monthly_price_krw ? "secondary" : "primary"}
               disabled={isCurrent || change.isPending}
               loading={change.isPending && change.variables === plan.key}
               onClick={() =>
