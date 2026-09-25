@@ -41,6 +41,7 @@ from app.db.models import (
     Source,
     User,
 )
+from app.db.session import session_scope
 from app.log import get_logger
 from app.notify.channels import build_channels
 from app.notify.dispatch import deliver_pending, enqueue_alerts
@@ -239,34 +240,65 @@ class DemoReport:
 
 
 @asynccontextmanager
-async def _job(session: AsyncSession, name: str, **args: Any) -> AsyncIterator[dict[str, Any]]:
+async def _job(name: str, **args: Any) -> AsyncIterator[dict[str, Any]]:
     """Record a demo step as a job run under the worker's job name, so the operator console
-    shows what the demo actually executed (the worker's own jobs use ``worker.tasks.tracked``)."""
-    run = JobRun(job=name, job_id=f"demo:{name}:{uuid4().hex[:8]}", status="running", args=args)
-    session.add(run)
-    await session.flush()
+    shows what the demo executed. Like ``worker.tasks.tracked``, the row lives in its own
+    transactions: a step that fails and rolls back its work still leaves a "failed" row."""
+    async with session_scope() as s:
+        run = JobRun(job=name, job_id=f"demo:{name}:{uuid4().hex[:8]}", status="running", args=args)
+        s.add(run)
+        await s.flush()
+        run_id = run.id
     started = time.perf_counter()
     result: dict[str, Any] = {}
+    status, error = "succeeded", None
     try:
         yield result
     except Exception as exc:
-        run.status, run.error = "failed", f"{type(exc).__name__}: {exc}"[:4000]
+        status, error = "failed", f"{type(exc).__name__}: {exc}"[:4000]
         raise
-    else:
-        run.status = "succeeded"
     finally:
-        run.finished_at = datetime.now(UTC)
-        run.duration_ms = int((time.perf_counter() - started) * 1000)
-        run.result = {k: v for k, v in result.items() if isinstance(v, (int, float, str, bool))}
+        async with session_scope() as s:
+            row = await s.get(JobRun, run_id)
+            if row is not None:
+                row.status, row.error = status, error
+                row.finished_at = datetime.now(UTC)
+                row.duration_ms = int((time.perf_counter() - started) * 1000)
+                row.result = {
+                    k: v for k, v in result.items() if isinstance(v, (int, float, str, bool))
+                }
 
 
-async def run_demo_pipeline(session: AsyncSession, runtime: Runtime, *, anchor: date) -> DemoReport:
+async def send_morning_digest(
+    session: AsyncSession, runtime: Runtime, org_ids: list[int], *, anchor: date
+) -> dict[str, int]:
+    """The 08:00 KST digest on the anchor day, through the same code as the worker's daily
+    cron, handed to the configured channels (Mailpit in `make infra` and docker compose). With
+    no mail server running it stays pending for retry — the demo doesn't pretend it was sent."""
+    morning = datetime.combine(anchor, dtime(8, 0), tzinfo=KST).astimezone(UTC)
+    web_url = runtime.settings.public_web_url
+    for org_id in org_ids:
+        async with _job("enqueue_alerts", org_id=org_id, mode="daily") as job:
+            job["notifications"] = await enqueue_alerts(
+                session, org_id, web_url=web_url, mode_filter="daily", now=morning
+            )
+    await session.commit()
+    async with _job("deliver_notifications") as job:
+        stats = await deliver_pending(session, build_channels(runtime.settings), now=morning)
+        job.update(stats)
+    await session.commit()
+    return stats
+
+
+async def run_demo_pipeline(
+    session: AsyncSession, runtime: Runtime, *, anchor: date, digest: bool = True
+) -> DemoReport:
     report = DemoReport()
     sources = (await session.scalars(select(Source).where(Source.key.like("fixture_%")))).all()
     window = FetchWindow(anchor - timedelta(days=365 * 4), anchor)
     doc_ids: list[int] = []
     for src in sources:
-        async with _job(session, "ingest_source", source=src.key) as job:
+        async with _job("ingest_source", source=src.key) as job:
             stats = await run_ingest(session, src, build_adapter(src, runtime), runtime, window)
             job.update(fetched=stats.fetched, changed=len(stats.changed_ids))
         doc_ids += stats.changed_ids
@@ -276,7 +308,7 @@ async def run_demo_pipeline(session: AsyncSession, runtime: Runtime, *, anchor: 
     docs = (await session.scalars(select(Document).where(Document.id.in_(doc_ids)))).all()
     signal_ids: list[int] = []
     for i, doc in enumerate(sorted(docs, key=lambda d: d.published_at)):
-        async with _job(session, "process_document", document_id=doc.id) as job:
+        async with _job("process_document", document_id=doc.id) as job:
             result = await process_document(session, runtime, doc.id)
             job.update(signals=len(result.signal_ids), needs_review=result.needs_review)
         signal_ids += result.signal_ids
@@ -288,12 +320,12 @@ async def run_demo_pipeline(session: AsyncSession, runtime: Runtime, *, anchor: 
     await session.commit()
     report.signals = len(signal_ids)
 
-    async with _job(session, "link_signals", signals=len(signal_ids)) as job:
+    async with _job("link_signals", signals=len(signal_ids)) as job:
         touched = await link_signals(session, runtime, signal_ids, today=anchor)
         job.update(opportunities=len(touched))
     await session.commit()
     report.opportunities = len(touched)
-    async with _job(session, "nightly_backtest") as job:
+    async with _job("nightly_backtest") as job:
         metrics = await run_backtest(session, today=anchor)
         job.update(tenders=(metrics.get("tender_early_coverage") or {}).get("tenders", 0))
     session.add(
@@ -315,28 +347,13 @@ async def run_demo_pipeline(session: AsyncSession, runtime: Runtime, *, anchor: 
             await refresh_opportunity(session, opp, today=anchor, calibration=calibration)
     org_ids = list((await session.scalars(select(Organization.id))).all())
     for org_id in org_ids:
-        async with _job(session, "refresh_recommendations", org_id=org_id) as job:
+        async with _job("refresh_recommendations", org_id=org_id) as job:
             scored = await refresh_recommendations(session, org_id, today=anchor)
             job.update(recommendations=len(scored))
     await session.commit()
 
-    # The morning digest, through the same code as the worker's daily cron: build it at 08:00
-    # KST on the anchor day and hand it to the configured channels (Mailpit in `make infra`
-    # and docker compose). With no mail server running it stays pending for retry — the demo
-    # does not pretend it was sent.
-    morning = datetime.combine(anchor, dtime(8, 0), tzinfo=KST).astimezone(UTC)
-    web_url = runtime.settings.public_web_url
-    for org_id in org_ids:
-        async with _job(session, "enqueue_alerts", org_id=org_id, mode="daily") as job:
-            job["notifications"] = await enqueue_alerts(
-                session, org_id, web_url=web_url, mode_filter="daily", now=morning
-            )
-    async with _job(session, "deliver_notifications") as job:
-        report.notifications = await deliver_pending(
-            session, build_channels(runtime.settings), now=morning
-        )
-        job.update(report.notifications)
-    await session.commit()
+    if digest:
+        report.notifications = await send_morning_digest(session, runtime, org_ids, anchor=anchor)
     return report
 
 

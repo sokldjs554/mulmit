@@ -124,5 +124,7 @@ async def demo_world(runtime: object) -> object:
         )
         await seed_tenants(s, runtime)  # type: ignore[arg-type]
     async with session_scope() as s:
-        report = await run_demo_pipeline(s, runtime, anchor=anchor)  # type: ignore[arg-type]
+        # No digest here: it would mark every org's recommendations as notified and leave
+        # pending notifications in the shared test database (see test_pipeline for the digest).
+        report = await run_demo_pipeline(s, runtime, anchor=anchor, digest=False)  # type: ignore[arg-type]
     return report
