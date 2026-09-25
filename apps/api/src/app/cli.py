@@ -137,7 +137,7 @@ def eval_all(
 ) -> None:
     """Extraction, triage, linking and OCR metrics against the synthetic ground truth, plus the
     hand-written realistic set."""
-    configure_logging(json=False, level="WARNING")
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
 
     async def go(session: Any, runtime: Any) -> dict[str, Any]:
         from app.eval.runner import run_all_evals
@@ -169,7 +169,7 @@ def eval_llm(
     from app.eval.llm_compare import DEFAULT_CANDIDATES, Candidate, compare, estimate, render
     from app.eval.realistic import load_realistic
 
-    configure_logging(json=False, level="WARNING")
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
     try:
         candidates = [Candidate.parse(m) for m in (model or DEFAULT_CANDIDATES)]
     except ValueError as exc:
@@ -226,34 +226,36 @@ def sources_check(
     source: list[str] = typer.Option(
         None, "--source", "-s", help="g2b_order_plan | g2b_prespec | g2b_bid (default: all)"
     ),
-    days: int = typer.Option(7, help="Look back this many days"),
-    rows: int = typer.Option(20, help="Items per call"),
+    days: int = typer.Option(7, min=1, max=31, help="Look back this many days"),
+    rows: int = typer.Option(20, min=1, max=100, help="Items per call"),
     report: Path = typer.Option(None, help="Write a Markdown report here"),
 ) -> None:
     """Call each 조달청 operation once with APP_DATA_GO_KR_SERVICE_KEY and check that the
-    adapter can read what comes back. No database needed; nothing is stored."""
-    from app.sources.check import as_json, check_g2b, render
+    adapter can read what comes back. No database needed; nothing is stored.
 
-    configure_logging(json=False, level="WARNING")
-    settings = get_settings()
-    if not settings.data_go_kr_service_key:
+    Exits 1 when any call failed or an operation's items could not be mapped."""
+    from app.sources.check import as_json, check_g2b, problems, render
+    from app.sources.g2b import OPERATIONS
+
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
+    if unknown := sorted(set(source or ()) - set(OPERATIONS)):
+        raise typer.BadParameter(
+            f"unknown {', '.join(unknown)}; one of {', '.join(OPERATIONS)}", param_hint="--source"
+        )
+    secret = get_settings().data_go_kr_service_key
+    if secret is None:
         typer.echo("APP_DATA_GO_KR_SERVICE_KEY is not set (.env or environment)", err=True)
         raise typer.Exit(2)
-    checks = _run(
-        lambda: check_g2b(
-            settings.data_go_kr_service_key.get_secret_value(),  # type: ignore[union-attr]
-            sources=source or None,
-            days=days,
-            rows=rows,
-        )
-    )
+    key = secret.get_secret_value()
+    checks = _run(lambda: check_g2b(key, sources=source or None, days=days, rows=rows))
     for c in checks:
         status = f"{c.mapped}/{c.items} mapped (total {c.total})" if c.ok else f"FAILED {c.error}"
         typer.echo(f"{c.path.rsplit('/', 1)[-1]:<36} {status}", err=True)
     if report is not None:
         report.write_text(render(checks, days=days), encoding="utf-8")
     typer.echo(json.dumps(as_json(checks), ensure_ascii=False, indent=2, default=str))
-    if not any(c.ok for c in checks):
+    if issues := problems(checks):
+        typer.echo(f"{len(issues)} problem(s); see the report", err=True)
         raise typer.Exit(1)
 
 
@@ -266,7 +268,7 @@ def bench(
     between the initial schema and head (see docs/performance.md)."""
     from app.bench import SIZES, run_bench
 
-    configure_logging(json=False, level="WARNING")
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
     sizes = {k: max(1, int(v * scale)) for k, v in SIZES.items()}
     results = _run(lambda: run_bench(sizes, report, log=typer.echo))
     typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
@@ -285,7 +287,7 @@ def openapi() -> None:
     """Print the OpenAPI schema (used to generate the web app's TypeScript types)."""
     from app.api.app import create_app
 
-    configure_logging(json=False, level="WARNING")
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
     typer.echo(json.dumps(create_app().openapi(), ensure_ascii=False, indent=2))
 
 

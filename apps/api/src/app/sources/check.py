@@ -18,6 +18,7 @@ It reads nothing from and writes nothing to the database.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import asdict, dataclass, field
 from datetime import timedelta
@@ -27,9 +28,10 @@ from urllib.parse import quote, quote_plus
 import httpx
 
 from app.clock import today_kst
+from app.log import redact_secrets
 from app.sources import g2b
 from app.sources.base import DocType
-from app.sources.http import ResilientClient, redact_secrets
+from app.sources.http import ResilientClient
 from app.sources.resilience import MemoryBreaker, MemoryLimiter
 
 # structured keys produced by g2b.map_item that downstream steps depend on
@@ -73,40 +75,64 @@ async def check_g2b(
     sources: list[str] | None = None,
     days: int = 7,
     rows: int = 20,
+    concurrency: int = 3,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> list[OperationCheck]:
+    unknown = sorted(set(sources or ()) - set(g2b.OPERATIONS))
+    if unknown:
+        raise ValueError(f"unknown source {', '.join(unknown)}; one of {', '.join(g2b.OPERATIONS)}")
     until = today_kst()
     since = until - timedelta(days=days - 1)
-    results: list[OperationCheck] = []
-    for key, op in g2b.OPERATIONS.items():
-        if sources and key not in sources:
-            continue
-        for path in op.paths:
-            # A client (and circuit breaker) per operation: one failing service must not
-            # hide the others behind "circuit open".
-            client = ResilientClient(
-                f"g2b-check:{path.rsplit('/', 1)[-1]}",
-                base_url=g2b.BASE_URL,
-                limiter=MemoryLimiter(),
-                breaker=MemoryBreaker(),
-                max_attempts=2,
-                transport=transport,
+    key = g2b.normalize_service_key(service_key)
+    breaker, limiter = MemoryBreaker(), MemoryLimiter()
+    sem = asyncio.Semaphore(concurrency)
+
+    async def one(source: str, doc_type: DocType, path: str) -> OperationCheck:
+        check = OperationCheck(source, path)
+        client = ResilientClient(
+            f"g2b-check:{path.rsplit('/', 1)[-1]}",  # breaker state per operation
+            base_url=g2b.BASE_URL,
+            limiter=limiter,
+            breaker=breaker,
+            max_attempts=2,
+            transport=transport,
+        )
+        started = time.perf_counter()
+        try:
+            async with sem:
+                items, total = await g2b.fetch_page(client, key, path, since, until, rows=rows)
+        except Exception as exc:  # report every failure mode, never the key
+            text = _mask(_mask(f"{type(exc).__name__}: {exc}", service_key), key)
+            check.error = text[:500]
+        else:
+            _inspect(check, doc_type, items, total)
+        finally:
+            await client.aclose()
+        check.latency_ms = int((time.perf_counter() - started) * 1000)
+        return check
+
+    return list(
+        await asyncio.gather(
+            *(
+                one(source, op.doc_type, path)
+                for source, op in g2b.OPERATIONS.items()
+                if not sources or source in sources
+                for path in op.paths
             )
-            check = OperationCheck(key, path)
-            started = time.perf_counter()
-            try:
-                items, total = await g2b.fetch_page(
-                    client, service_key, path, since, until, rows=rows
-                )
-            except Exception as exc:  # report every failure mode, never the key
-                check.error = _mask(f"{type(exc).__name__}: {exc}", service_key)[:500]
-            else:
-                _inspect(check, op.doc_type, items, total)
-            finally:
-                await client.aclose()
-            check.latency_ms = int((time.perf_counter() - started) * 1000)
-            results.append(check)
-    return results
+        )
+    )
+
+
+def problems(checks: list[OperationCheck]) -> list[str]:
+    """What should make the command exit non-zero: failed calls, and operations that returned
+    items none of which could be read (the field-rename case)."""
+    out = [f"{c.path}: {c.error}" for c in checks if not c.ok]
+    out += [
+        f"{c.path}: {c.items} items, none mapped"
+        for c in checks
+        if c.ok and c.items and not c.mapped
+    ]
+    return out
 
 
 def _inspect(
@@ -150,6 +176,10 @@ _LABEL = {
 }
 
 
+def _cell(text: str) -> str:
+    return " ".join(text.split()).replace("|", "\\|")
+
+
 def _pct(v: float | None) -> str:
     return "–" if v is None else f"{v * 100:.0f}%"
 
@@ -165,7 +195,7 @@ def render(checks: list[OperationCheck], *, days: int) -> str:
     ]
     for c in checks:
         op = c.path.rsplit("/", 1)[-1]
-        result = "성공" if c.ok else f"실패: {c.error}"
+        result = "성공" if c.ok else f"실패: {_cell(c.error or '')}"
         cov = ", ".join(f"{_LABEL.get(k, k)} {_pct(v)}" for k, v in c.coverage.items()) or "–"
         lines.append(
             f"| `{c.source}` | `{op}` | {result} | {c.total if c.total is not None else '–'} | "
@@ -188,10 +218,10 @@ def render(checks: list[OperationCheck], *, days: int) -> str:
         lines += ["", "## 예시 레코드 (오퍼레이션별 첫 건)", ""]
         for c in samples:
             s = c.sample or {}
-            amount = f"{s['amount_krw']:,}원" if s.get("amount_krw") else "금액 없음"
+            amount = f"{s['amount_krw']:,}원" if s.get("amount_krw") is not None else "금액 없음"
             lines.append(
-                f"- `{c.path.rsplit('/', 1)[-1]}` {s['published']} · {s['publisher'] or '기관 미상'} · "
-                f"{s['title']} · {amount}"
+                f"- `{c.path.rsplit('/', 1)[-1]}` {s['published']} · "
+                f"{_cell(s['publisher'] or '기관 미상')} · {_cell(s['title'])} · {amount}"
             )
     return "\n".join(lines) + "\n"
 

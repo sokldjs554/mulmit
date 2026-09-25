@@ -1,13 +1,16 @@
 """`manage sources check` against a fake 공공데이터포털: coverage, renamed fields, masked keys."""
 
+import io
+import re
 from typing import Any
 
 import httpx
 import pytest
 
-from app.observability import _scrub
-from app.sources.check import check_g2b, render
-from app.sources.http import redact_secrets
+from app.log import configure_logging, get_logger, redact_secrets
+from app.observability import _scrub, event_scrubber
+from app.sources.check import check_g2b, problems, render
+from app.sources.g2b import normalize_service_key
 
 KEY = "abc+DEF/ghi=="  # data.go.kr keys contain URL-special characters
 
@@ -116,11 +119,12 @@ def test_redaction_leaves_ordinary_parameters_alone() -> None:
     assert redact_secrets(text) == text
 
 
-def test_sentry_events_lose_keys_in_breadcrumbs_and_exceptions() -> None:
+def test_sentry_errors_lose_keys_in_breadcrumbs_and_exceptions() -> None:
     event: Any = {
         "breadcrumbs": {
             "values": [
-                {"data": {"url": "https://apis.data.go.kr/x?serviceKey=SECRET"}},
+                # sentry-sdk's httpx integration keeps the query apart from the URL
+                {"data": {"url": "https://apis.data.go.kr/x", "http.query": "serviceKey=SECRET"}},
                 {"message": "source.retry error='cannot reach https://x?key=SECRET&page=1'"},
             ]
         },
@@ -129,3 +133,110 @@ def test_sentry_events_lose_keys_in_breadcrumbs_and_exceptions() -> None:
     scrubbed = _scrub(event, {})
     assert scrubbed is not None
     assert "SECRET" not in str(scrubbed)
+
+
+def test_sentry_transactions_lose_keys_in_span_data() -> None:
+    transaction: Any = {
+        "type": "transaction",
+        "spans": [
+            {
+                "op": "http.client",
+                "description": "GET https://apis.data.go.kr/x",
+                "data": {"http.query": "serviceKey=SECRET&type=json", "url": "https://x"},
+            }
+        ],
+    }
+    scrubbed = _scrub(transaction, {})
+    assert scrubbed is not None
+    assert "SECRET" not in str(scrubbed)
+    assert "type=json" in str(scrubbed)
+
+
+def test_sentry_frame_variables_holding_keys_are_scrubbed() -> None:
+    event: Any = {
+        "exception": {
+            "values": [
+                {
+                    "stacktrace": {
+                        "frames": [
+                            {"function": "fetch_page", "vars": {"service_key": "SECRET"}},
+                            {"function": "request", "vars": {"params": {"serviceKey": "SECRET"}}},
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+    event_scrubber().scrub_event(event)
+    assert "SECRET" not in str(event)
+
+
+def test_log_lines_and_chained_tracebacks_are_redacted() -> None:
+    out = io.StringIO()
+    configure_logging(json=True, level="WARNING", stream=out)
+    log = get_logger("test")
+    log.warning("source.retry", error="cannot reach https://x?serviceKey=SECRET")
+    try:
+        try:
+            raise httpx.ConnectError("cannot reach https://x?serviceKey=SECRET")
+        except httpx.ConnectError as exc:
+            raise RuntimeError("gave up") from exc  # the cause keeps the raw URL
+    except RuntimeError:
+        log.exception("job.failed")
+    text = out.getvalue()
+    assert "job.failed" in text and "serviceKey=***" in text
+    assert "SECRET" not in text
+
+
+def test_encoding_form_keys_are_sent_once_encoded() -> None:
+    assert normalize_service_key("abc%2BDEF%2Fghi%3D%3D") == KEY
+    assert normalize_service_key(KEY) == KEY
+
+
+async def test_encoding_form_key_reaches_the_provider_as_the_real_key() -> None:
+    seen: list[str] = []
+
+    def capture(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.params["serviceKey"])
+        return _ok([ORDER_PLAN])
+
+    await check_g2b(
+        "abc%2BDEF%2Fghi%3D%3D", sources=["g2b_order_plan"], transport=httpx.MockTransport(capture)
+    )
+    assert seen and set(seen) == {KEY}
+
+
+async def test_exit_problems_and_unknown_sources() -> None:
+    checks = await check_g2b(KEY, transport=httpx.MockTransport(_handler))
+    issues = problems(checks)
+    assert any("getPublicPrcureThngInfo" in i for i in issues)  # failed calls
+    assert any("none mapped" in i for i in issues)  # renamed bid field
+    assert not any("OrderPlanSttus" in i for i in issues)
+    with pytest.raises(ValueError, match="unknown source"):
+        await check_g2b(KEY, sources=["g2b_bid_notice"])
+
+
+def test_report_cells_survive_pipes_and_newlines() -> None:
+    from app.sources.check import OperationCheck
+
+    bad = OperationCheck("g2b_bid", "/ad/X/op", error="HTTP 500 | upstream\nreset")
+    lines = render([bad], days=7).splitlines()
+    header = next(line for line in lines if line.startswith("| 수집원"))
+    row = next(line for line in lines if "`op`" in line)
+    unescaped_pipes = re.compile(r"(?<!\\)\|")
+    assert len(unescaped_pipes.split(row)) == len(unescaped_pipes.split(header))
+
+
+def test_sentry_is_initialised_with_all_three_scrubbers(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sentry_sdk
+
+    from app.observability import init_sentry
+    from app.settings import Settings
+
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(sentry_sdk, "init", lambda **kw: seen.update(kw))
+    monkeypatch.setattr(sentry_sdk, "set_tag", lambda *_: None)
+    assert init_sentry(Settings(sentry_dsn="https://k@o0.ingest.sentry.io/1"), component="worker")
+    assert seen["before_send"] is _scrub
+    assert seen["before_send_transaction"] is _scrub
+    assert "servicekey" in seen["event_scrubber"].denylist

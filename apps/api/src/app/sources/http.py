@@ -22,7 +22,7 @@ from typing import Any
 
 import httpx
 
-from app.log import get_logger
+from app.log import get_logger, redact_secrets
 from app.sources.resilience import (
     Breaker,
     Limiter,
@@ -33,17 +33,6 @@ from app.sources.resilience import (
 log = get_logger(__name__)
 
 RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
-
-# Public-data APIs take the credential as a query parameter (data.go.kr ``serviceKey``, CLIK
-# ``key``, 지방재정365 ``Key``), so any URL in an error message carries it.
-_SECRET_PARAM = re.compile(
-    r"(?i)\b((?:service_?key|api_?key|auth_?key|crtfc_key|key)=)[^&\s'\"<>]+"
-)
-
-
-def redact_secrets(text: str) -> str:
-    """Mask credential query parameters in text bound for logs, errors or Sentry."""
-    return _SECRET_PARAM.sub(r"\1***", text)
 
 
 # data.go.kr common error codes (공공데이터포털 OpenAPI 에러코드 표)
@@ -192,7 +181,7 @@ class ResilientClient:
                     source=self.source,
                     attempt=attempt + 1,
                     delay=round(delay, 2),
-                    error=redact_secrets(str(exc)),
+                    error=str(exc),  # app.log redacts credentials in every log line
                 )
                 await self._sleep(delay)
         assert last_exc is not None

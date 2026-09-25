@@ -10,12 +10,12 @@ prespec            ao/HrcspSsstndrdInfoService/getPublicPrcure*    ``bfSpecRgstN
 bid_notice         ad/BidPublicInfoService/getBidPblancListInfo*   ``bidNtceNo``-``bidNtceOrd``
 =================  =============================================  ==========================
 
-Each exists per 업무구분 (용역 ``Servc`` / 물품 ``Thng`` / 공사 ``Cnstwk``). Paths and field names
-are kept in :data:`OPERATIONS` so an operator can repoint them from the admin console (the
+Each exists per 업무구분 (용역 ``Servc`` / 물품 ``Thng`` / 공사 ``Cnstwk``). Paths live in
+:data:`OPERATIONS` and field names in :func:`map_item` — both in code, one place each (the
 provider has renamed services before: ``ad``/``ao`` prefixes arrived in 2025). The field mapping
 was written against the published specs and exercised with contract fixtures in
-``tests/unit/test_sources.py``; the dev container had no egress to data.go.kr, so the first run
-with a real key should be watched in the admin *Sources* page.
+``tests/unit/test_sources.py``; the dev container had no egress to data.go.kr, so run
+``manage sources check`` with a real key before the first ingest.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
+from urllib.parse import unquote
 
 from app.sources.base import (
     DocType,
@@ -82,6 +83,13 @@ def _items(payload: Any) -> tuple[list[dict[str, Any]], int]:
             items = [items]
     total = parse_int(body.get("totalCount")) or len(items)
     return [i for i in items if isinstance(i, dict)], total
+
+
+def normalize_service_key(key: str) -> str:
+    """공공데이터포털 shows each key twice: "Encoding" (``%2B``…) and "Decoding" (``+``…).
+    httpx encodes query values itself, so the Encoding form would be encoded a second time and
+    every call would fail with error 30 as if the service had never been applied for."""
+    return unquote(key) if "%" in key else key
 
 
 async def fetch_page(
@@ -192,7 +200,7 @@ class G2BAdapter:
         self.doc_type = OPERATIONS[key].doc_type
         self._op = OPERATIONS[key]
         self._client = client
-        self._service_key = service_key
+        self._service_key = normalize_service_key(service_key)
 
     async def aclose(self) -> None:
         await self._client.aclose()

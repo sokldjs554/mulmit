@@ -22,11 +22,13 @@ APP_DATA_GO_KR_SERVICE_KEY=... make check-sources
 
 | 보는 것 | 뜻 |
 |---|---|
-| 결과가 `실패: ... 30 SERVICE_KEY_IS_NOT_REGISTERED_ERROR` | 그 서비스에 활용신청이 안 됐거나 승인 전입니다. 공공데이터포털에서 서비스마다 신청합니다 |
+| 결과가 `실패: ... 30 SERVICE_KEY_IS_NOT_REGISTERED_ERROR` | 그 서비스에 활용신청이 안 됐거나 승인 전입니다(승인 직후에는 반영까지 시간이 걸릴 수 있음). 공공데이터포털에서 서비스마다 신청합니다 |
 | 받은 항목 > 레코드로 변환 | id·제목·날짜 필드명이 명세와 다릅니다. 보고서의 "버려진 항목의 실제 필드"를 보고 `g2b.py`의 `map_item`에 새 이름을 추가합니다 |
 | 금액·발주계획번호·사전규격번호 채움 비율이 낮음 | 기회 연결과 랭킹이 약해집니다. 필드명을 확인합니다 |
 
-키는 출력·로그·Sentry 어디에도 남지 않습니다(`serviceKey=***`, `sources/http.py`의 `redact_secrets`).
+- 포털이 보여 주는 일반 인증키는 "Encoding"(`%2B` 등)과 "Decoding"(`+` 등) 두 가지인데 어느 쪽을 넣어도 됩니다. Encoding 키는 한 번 풀어서 보냅니다(`g2b.normalize_service_key`). 그대로 보내면 두 번 인코딩돼 모든 호출이 오류 30으로 실패합니다.
+- 키는 출력·로그·Sentry에 남지 않습니다. 로그는 `app/log.py`의 처리기가 모든 줄(트레이스백 포함)에서 `serviceKey=`·`key=`·`Key=` 값을 가리고, Sentry는 오류·성능 트랜잭션·스택 프레임 변수 모두 스크럽합니다(`observability.py`).
+- 조달청 필드명은 설정이 아니라 코드(`g2b.py`의 `map_item`)에서 고칩니다. 아래 `sources.config` 덮어쓰기는 CLIK·지방재정365 어댑터에 해당합니다.
 
 어긋나는 부분이 있으면 코드 수정 없이 `sources.config`(DB, JSON)에서 덮어쓸 수 있습니다.
 
