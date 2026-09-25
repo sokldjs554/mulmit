@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API · lint, types, tests, eval gate
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: mulmit
+          POSTGRES_PASSWORD: mulmit
+          POSTGRES_DB: mulmit
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mulmit" --health-interval 3s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      MULMIT_LOG_JSON: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - name: OCR engine and Korean fonts
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor fonts-nanum
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.17"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: uv sync --frozen
+      - name: Ruff
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: mypy (strict)
+        run: uv run mypy
+      - name: pytest (unit + integration against PostgreSQL/Redis)
+        run: uv run pytest --cov=mulmit --cov-report=term-missing:skip-covered --cov-report=xml
+      - name: OpenAPI schema matches the committed copy used by the web app
+        run: |
+          uv run mulmit openapi > "$RUNNER_TEMP/openapi.json"
+          diff -u ../web/openapi.json "$RUNNER_TEMP/openapi.json" || {
+            echo "::error::apps/web/openapi.json is stale. Run 'make gen-api' and commit the result."; exit 1; }
+      - name: Demo pipeline end to end
+        run: |
+          uv run mulmit db upgrade
+          uv run mulmit seed --anchor 2026-09-25
+          uv run mulmit demo run
+      - name: Quality gate on the synthetic ground truth
+        run: |
+          uv run mulmit eval all --report "$RUNNER_TEMP/evaluation.md" > "$RUNNER_TEMP/eval.json"
+          jq -e '
+            .extraction.precision >= 0.95 and .extraction.recall >= 0.95 and
+            .linking.pairwise.precision >= 0.95 and .linking.pairwise.recall >= 0.95 and
+            .ocr.amount_token_accuracy_corrected >= 0.98 and .ocr.cer_corrected <= 0.03
+          ' "$RUNNER_TEMP/eval.json" || { echo "::error::evaluation below threshold"; cat "$RUNNER_TEMP/evaluation.md"; exit 1; }
+          cat "$RUNNER_TEMP/evaluation.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: api-reports
+          path: |
+            apps/api/coverage.xml
+            ${{ runner.temp }}/eval.json
+            ${{ runner.temp }}/evaluation.md
+          if-no-files-found: ignore
+
+  web:
+    name: Web · types, lint, tests, build
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Generated API types match openapi.json
+        run: |
+          pnpm exec openapi-typescript openapi.json -o src/lib/api/schema.d.ts
+          git diff --exit-code -- src/lib/api/schema.d.ts
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  terraform:
+    name: Terraform · fmt, validate
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  images:
+    name: Docker images
+    needs: [api, web]
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        app: [api, web]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: apps/${{ matrix.app }}
+          push: false
+          tags: mulmit-${{ matrix.app }}:ci
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
