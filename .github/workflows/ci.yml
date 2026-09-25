@@ -37,10 +37,10 @@ jobs:
     env:
       APP_LOG_JSON: "false"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: OCR engine and Korean fonts
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor fonts-nanum
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.8.17"
           # the lockfile forks numpy by Python version; CI must type-check what production runs
@@ -73,7 +73,7 @@ jobs:
             .ocr.amount_token_accuracy_corrected >= 0.98 and .ocr.cer_corrected <= 0.03
           ' "$RUNNER_TEMP/eval.json" || { echo "::error::evaluation below threshold"; cat "$RUNNER_TEMP/evaluation.md"; exit 1; }
           cat "$RUNNER_TEMP/evaluation.md" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: api-reports
@@ -92,11 +92,11 @@ jobs:
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: apps/web/package.json
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -118,8 +118,8 @@ jobs:
       run:
         working-directory: infra/terraform
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.8
       - run: terraform fmt -check -recursive
@@ -134,9 +134,9 @@ jobs:
       matrix:
         app: [api, web]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: apps/${{ matrix.app }}
           push: false
