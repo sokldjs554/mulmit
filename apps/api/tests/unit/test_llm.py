@@ -358,6 +358,26 @@ def test_template_brief_reads_like_a_person_wrote_it() -> None:
     assert "입찰공고는 2026.06.01에 나왔어요." in published
 
 
+def test_template_brief_quotes_speech_not_table_rows() -> None:
+    from app.domain.stages import Stage
+    from app.llm.prompts import BriefSignal
+    from app.pipeline.brief import template_brief
+
+    row = BriefSignal(
+        date(2025, 12, 18),
+        Stage.BUDGET,
+        "스마트폴 설치",
+        411_000_000,
+        "committed",
+        "세부사업: 스마트폴 설치  411,000  0  411,000",
+    )
+    base = _brief_facts("budget_line", "committed")
+    brief = template_brief(_brief_facts("budget_line", "committed", signals=(*base.signals, row)))
+    assert "- **2025.12.18 · 예산 편성** — 스마트폴 설치 (4억 1,100만원)" in brief
+    assert "411,000  0" not in brief
+    assert "  > 「내년도 본예산에 반영하겠습니다.」" in brief
+
+
 def test_template_brief_does_not_forecast_a_window_that_has_passed() -> None:
     from app.pipeline.brief import template_brief
 

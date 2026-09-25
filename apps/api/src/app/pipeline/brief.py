@@ -219,7 +219,9 @@ def template_brief(facts: BriefFacts) -> str:
             head += f" ({format_krw(s.budget_krw)})"
         said = _SAID.get(s.commitment or "") if s.stage is Stage.COUNCIL else None
         timeline.append(f"{head}. {said}" if said else head)
-        if s.one_line_quote.strip("…").strip():
+        # Quote what people said. Budget rows and procurement records are tables and field
+        # dumps; the line above already carries their date, stage and amount.
+        if s.stage is Stage.COUNCIL and s.one_line_quote.strip("…").strip():
             timeline.append(f"  > 「{s.one_line_quote}」")
 
     money = [
