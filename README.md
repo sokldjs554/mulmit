@@ -222,7 +222,7 @@ docker compose run --rm api manage demo run
 ```bash
 make install        # uv sync + pnpm install
 make infra          # PostgreSQL(pgvector)·Redis·Mailpit
-make demo           # 마이그레이션 → 합성 세계 시드 → 전체 파이프라인 → 아침 요약 메일 발송 (Mailpit :8025에서 확인, 약 30초)
+make demo           # 마이그레이션 → 합성 세계 시드 → 전체 파이프라인 → 아침 요약 메일 발송 (Mailpit :8025에서 확인, 약 20초)
 make api            # :8000   (다른 터미널)
 make worker         # arq 워커 + cron
 make web            # :3000
