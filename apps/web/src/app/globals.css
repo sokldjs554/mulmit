@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+/* Theme toggle: data-theme on <html> wins over the OS setting in both directions. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+  --bg: #f4f4f0;
+  --surface: #fcfcfb;
+  --surface-2: #f0efeb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #74726c;
+  --line: #e1e0d9;
+  --line-strong: #c3c2b7;
+  --accent: #1c5cab;
+  --accent-hover: #184f95;
+  --accent-ink: #ffffff;
+  --accent-soft: #e6eefa;
+  --accent-text: #1c5cab;
+  --mark: #fff1b8;
+  --good: #0ca30c;
+  --good-text: #006300;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --series-1: #2a78d6;
+  --series-1-wash: rgba(42, 120, 214, 0.1);
+  /* ordinal ramp (blue 250 → 650) for the procurement lifecycle stages */
+  --stage-1: #86b6ef;
+  --stage-2: #5598e7;
+  --stage-3: #3987e5;
+  --stage-4: #256abf;
+  --stage-5: #184f95;
+  --stage-6: #104281;
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.04), 0 1px 1px rgba(11, 11, 11, 0.03);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --bg: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #8f8d86;
+    --line: #2c2c2a;
+    --line-strong: #383835;
+    --accent: #3987e5;
+    --accent-hover: #5598e7;
+    --accent-ink: #0b0b0b;
+    --accent-soft: #16263b;
+    --accent-text: #86b6ef;
+    --mark: #4a3d0c;
+    --good-text: #0ca30c;
+    --series-1: #3987e5;
+    --series-1-wash: rgba(57, 135, 229, 0.14);
+    --stage-1: #184f95;
+    --stage-2: #1c5cab;
+    --stage-3: #256abf;
+    --stage-4: #3987e5;
+    --stage-5: #6da7ec;
+    --stage-6: #9ec5f4;
+    --shadow: none;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #8f8d86;
+  --line: #2c2c2a;
+  --line-strong: #383835;
+  --accent: #3987e5;
+  --accent-hover: #5598e7;
+  --accent-ink: #0b0b0b;
+  --accent-soft: #16263b;
+  --accent-text: #86b6ef;
+  --mark: #4a3d0c;
+  --good-text: #0ca30c;
+  --series-1: #3987e5;
+  --series-1-wash: rgba(57, 135, 229, 0.14);
+  --stage-1: #184f95;
+  --stage-2: #1c5cab;
+  --stage-3: #256abf;
+  --stage-4: #3987e5;
+  --stage-5: #6da7ec;
+  --stage-6: #9ec5f4;
+  --shadow: none;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-good: var(--good);
+  --color-good-text: var(--good-text);
+  --color-warning: var(--warning);
+  --color-serious: var(--serious);
+  --color-critical: var(--critical);
+  --color-series-1: var(--series-1);
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --shadow-card: var(--shadow);
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  word-break: keep-all; /* Korean: break between words, not syllables */
+}
+
+mark {
+  background: var(--mark);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.prose-brief h2 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 1.25rem 0 0.4rem;
+  color: var(--ink);
+}
+.prose-brief h2:first-child {
+  margin-top: 0;
+}
+.prose-brief p,
+.prose-brief li {
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+.prose-brief ul {
+  list-style: disc;
+  padding-left: 1.2rem;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
