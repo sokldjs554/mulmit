@@ -58,11 +58,11 @@ export default function Home() {
       </header>
 
       <section className="mx-auto max-w-6xl px-4 pt-12 pb-16 md:pt-20">
-        <p className="text-sm font-semibold text-accent-text">B2G 선행신호 인텔리전스</p>
+        <p className="text-sm font-semibold text-accent-text">공공조달 발주 예측 서비스</p>
         <h1 className="mt-3 max-w-3xl text-[34px] leading-[1.15] font-bold tracking-tight text-ink md:text-[52px]">
-          입찰공고가 뜨면
+          입찰공고 전에
           <br />
-          이미 늦었습니다.
+          공공사업을 미리 확인하세요.
         </h1>
         <p className="mt-5 max-w-2xl text-[17px] leading-relaxed text-ink-2">
           공공사업은 공고 6~18개월 전에 지방의회 회의록과 예산서에서 먼저 모습을 드러냅니다. 발주 예측은 그 문서들을 매일 읽고, 우리 회사가 영업을

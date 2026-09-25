@@ -230,7 +230,7 @@ export default function AlertsPage() {
   const plan = me.data?.org.plan ?? "free";
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader title="알림" description="입찰공고를 기다리지 말고, 수요가 움직이는 순간 받아보세요." />
+      <PageHeader title="알림" description="알림 조건과 받을 곳을 설정합니다." />
       {rule.data ? <RuleCard key={rule.dataUpdatedAt} rule={rule.data} plan={plan} /> : <Skeleton className="h-72" />}
       <ChannelsCard plan={plan} />
       <LogCard />

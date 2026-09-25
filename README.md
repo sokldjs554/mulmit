@@ -1,6 +1,6 @@
 # 발주 예측
 
-**입찰공고가 뜨기 전에, 공공 수요를 먼저 읽는 B2G 영업 인텔리전스**
+**입찰공고 전에 공공사업을 미리 확인하는 공공조달 발주 예측 서비스**
 
 [![CI](https://github.com/sokldjs554/mulmit/actions/workflows/ci.yml/badge.svg)](https://github.com/sokldjs554/mulmit/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
