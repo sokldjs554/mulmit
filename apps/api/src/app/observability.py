@@ -11,6 +11,7 @@ from sentry_sdk.types import Event, Hint
 
 from app import __version__
 from app.settings import Settings
+from app.sources.http import redact_secrets
 
 _SCRUB_KEYS = {"authorization", "cookie", "billing_key", "password", "service_key", "secret"}
 
@@ -25,9 +26,14 @@ def _scrub(event: Event, _hint: Hint) -> Event | None:
     breadcrumbs: Any = event.get("breadcrumbs") or {}
     for crumb in breadcrumbs.get("values", []) if isinstance(breadcrumbs, dict) else []:
         data = crumb.get("data") or {}
-        url = data.get("url")
-        if isinstance(url, str) and "serviceKey=" in url:
-            data["url"] = url.split("serviceKey=")[0] + "serviceKey=[scrubbed]"
+        for field in ("url", "http.query"):
+            if isinstance(data.get(field), str):
+                data[field] = redact_secrets(data[field])
+        if isinstance(crumb.get("message"), str):  # log records, e.g. source.retry
+            crumb["message"] = redact_secrets(crumb["message"])
+    for exc in (event.get("exception") or {}).get("values", []):
+        if isinstance(exc.get("value"), str):
+            exc["value"] = redact_secrets(exc["value"])
     return event
 
 

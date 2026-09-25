@@ -84,6 +84,32 @@ def _items(payload: Any) -> tuple[list[dict[str, Any]], int]:
     return [i for i in items if isinstance(i, dict)], total
 
 
+async def fetch_page(
+    client: ResilientClient,
+    service_key: str,
+    path: str,
+    start: date,
+    end: date,
+    *,
+    page: int = 1,
+    rows: int = 100,
+) -> tuple[list[dict[str, Any]], int]:
+    """One page of one operation, by registration date: ``(items, totalCount)``."""
+    payload = await client.get_json(
+        path,
+        params={
+            "serviceKey": service_key,
+            "type": "json",
+            "inqryDiv": 1,
+            "inqryBgnDt": start.strftime("%Y%m%d") + "0000",
+            "inqryEndDt": end.strftime("%Y%m%d") + "2359",
+            "pageNo": page,
+            "numOfRows": rows,
+        },
+    )
+    return _items(payload)
+
+
 def map_item(doc_type: DocType, item: dict[str, Any]) -> RawRecord | None:
     """Map one provider item to a :class:`RawRecord`. Returns ``None`` for unusable rows."""
     if doc_type == "order_plan":
@@ -184,19 +210,9 @@ class G2BAdapter:
         page = 1
         rows = 100
         while True:
-            payload = await self._client.get_json(
-                path,
-                params={
-                    "serviceKey": self._service_key,
-                    "type": "json",
-                    "inqryDiv": 1,
-                    "inqryBgnDt": start.strftime("%Y%m%d") + "0000",
-                    "inqryEndDt": end.strftime("%Y%m%d") + "2359",
-                    "pageNo": page,
-                    "numOfRows": rows,
-                },
+            items, total = await fetch_page(
+                self._client, self._service_key, path, start, end, page=page, rows=rows
             )
-            items, total = _items(payload)
             for item in items:
                 rec = map_item(self.doc_type, item)
                 if rec is not None:
