@@ -89,6 +89,13 @@ _STAGE_ADVICE: dict[Stage, tuple[list[str], list[str]]] = {
         ],
         ["이제는 규격을 바꿀 수 없어요. 가격과 제안서 완성도로 승부해야 해요."],
     ),
+    Stage.AWARD: (
+        [
+            "계약까지 끝난 사업이에요. 누가 얼마에 가져갔는지 적어 두면 다음 제안 가격을 잡을 때 도움이 돼요.",
+            "유지보수나 다른 지역으로 넓히는 후속 사업을 노려 보세요. 이 기관의 다음 회의록과 예산서를 계속 지켜보면 돼요.",
+        ],
+        ["이번 사업에는 더 참여할 수 없어요."],
+    ),
 }
 
 # How a council answer reads in the brief's timeline.
@@ -186,9 +193,10 @@ def template_brief(facts: BriefFacts) -> str:
     who = " ".join(x for x in (facts.institution, facts.department) if x)
     stage_label = STAGE_LABEL[facts.stage]
     span = month_span(facts.window_start, facts.window_end) if facts.window_start else None
-    if facts.bid_published_at:
-        timing = f"입찰공고는 {_dot(facts.bid_published_at)}에 나왔어요."
-        when = f"- 입찰공고: {_dot(facts.bid_published_at)}"
+    if facts.tender_out:
+        on = _dot(facts.bid_published_at) if facts.bid_published_at else None
+        timing = f"입찰공고는 {on}에 나왔어요." if on else "입찰공고는 이미 나왔어요."
+        when = f"- 입찰공고: {on or '날짜 미상'}"
     elif span and facts.window_passed:
         timing = f"예상했던 입찰 시기({span})가 지났는데 아직 공고는 안 나왔어요."
         when = f"- 입찰 예상 시기: {span} (지났지만 아직 공고 없음)"
@@ -229,9 +237,12 @@ def template_brief(facts: BriefFacts) -> str:
         if budget
         else "- 추정 예산: 아직 금액이 나온 문서가 없어요.",
         when,
-        f"- 공고로 이어질 가능성: {facts.conversion_prob:.0%} 정도로 봐요. 지금 단계와 의회 답변 수준, "
-        "같은 사업을 가리키는 문서 수로 매긴 추정치예요.",
     ]
+    if not facts.tender_out:  # once the tender is out there is nothing left to estimate
+        money.append(
+            f"- 공고로 이어질 가능성: {facts.conversion_prob:.0%} 정도로 봐요. 지금 단계와 의회 답변 "
+            "수준, 같은 사업을 가리키는 문서 수로 매긴 추정치예요."
+        )
     if facts.department:
         meet = [f"- {who}. 문서에 담당으로 나온 부서라서 여기부터 연락해 보세요."]
     elif who:

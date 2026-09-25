@@ -1053,6 +1053,11 @@ export interface components {
             window_passed: boolean;
             /** Bid Published At */
             bid_published_at: string | null;
+            /**
+             * Tender Out
+             * @default false
+             */
+            tender_out: boolean;
             /** Conversion Prob */
             conversion_prob: number;
             /** Signal Count */
@@ -1110,6 +1115,11 @@ export interface components {
             window_passed: boolean;
             /** Bid Published At */
             bid_published_at: string | null;
+            /**
+             * Tender Out
+             * @default false
+             */
+            tender_out: boolean;
             /** Conversion Prob */
             conversion_prob: number;
             /** Signal Count */

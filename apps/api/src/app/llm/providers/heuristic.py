@@ -306,5 +306,5 @@ class HeuristicProvider:
             value=template_brief(facts),
             provider=self.name,
             model=HEURISTIC_VERSION,
-            prompt_version="template-v2",
+            prompt_version="template-v3",
         )

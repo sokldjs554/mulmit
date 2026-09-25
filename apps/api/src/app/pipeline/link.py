@@ -36,6 +36,7 @@ from app.domain.stages import (
     STAGE_PRIOR,
     Stage,
     forecast_bid_window,
+    tender_is_out,
 )
 from app.domain.synonyms import canonical_terms, canonicalize
 from app.domain.text import char_ngrams, jaccard
@@ -206,7 +207,7 @@ def _conversion_probability(
     corroboration: int,
     calibration: dict[str, float] | None = None,
 ) -> float:
-    if STAGE_ORDER[stage] >= STAGE_ORDER[Stage.BID]:
+    if tender_is_out(stage, None):
         return 1.0
     key = f"{stage.value}:{commitment or 'none'}"
     if calibration and key in calibration:

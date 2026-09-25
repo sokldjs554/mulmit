@@ -352,10 +352,42 @@ def test_template_brief_reads_like_a_person_wrote_it() -> None:
     assert "- 2025.06.01 · 스마트폴 구축 (4억원)" in brief
     assert "2026-09-01" not in brief  # no raw ISO dates leak into the prose
 
-    published = template_brief(
-        _brief_facts("bid_notice", "committed", bid_published_at=date(2026, 6, 1))
+    assert "공고로 이어질 가능성: 72% 정도로 봐요" in brief
+
+
+def test_once_the_tender_is_out_nothing_is_estimated() -> None:
+    from app.pipeline.brief import template_brief
+
+    # what link.py stores for a published tender: the date is the window, conversion is 1.0
+    out = date(2026, 6, 1)
+    facts = _brief_facts(
+        "bid_notice",
+        "committed",
+        bid_published_at=out,
+        window_start=out,
+        window_end=out,
+        conversion_prob=1.0,
     )
-    assert "입찰공고는 2026.06.01에 나왔어요." in published
+    brief, prompt = template_brief(facts), facts.as_prompt()
+    assert "입찰공고는 2026.06.01에 나왔어요." in brief
+    assert "공고로 이어질 가능성" not in brief and "100%" not in brief
+    assert "- 입찰공고일: 2026-06-01" in prompt
+    assert "공고 전환 확률" not in prompt and "입찰 예상 시기" not in prompt
+    # the stage alone is enough (an award without a stored notice date): both paths agree
+    award = _brief_facts("award", "committed", conversion_prob=1.0)
+    assert award.tender_out
+    award_brief = template_brief(award)
+    assert "입찰공고는 이미 나왔어요." in award_brief and "입찰 예상" not in award_brief
+    assert "계약까지 끝난 사업이에요" in award_brief and "제안요청서" not in award_brief
+    assert "- 입찰공고일: 날짜 미상" in award.as_prompt()
+
+
+def test_the_tender_out_predicate_is_shared() -> None:
+    from app.domain.stages import Stage, tender_is_out
+
+    assert tender_is_out(Stage.BID, None) and tender_is_out("award", None)
+    assert tender_is_out("council_mention", date(2026, 6, 1))
+    assert not tender_is_out(Stage.PRESPEC, None)
 
 
 def test_template_brief_quotes_speech_not_table_rows() -> None:
