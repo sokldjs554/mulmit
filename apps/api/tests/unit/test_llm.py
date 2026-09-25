@@ -356,6 +356,8 @@ def test_template_brief_reads_like_a_person_wrote_it() -> None:
         _brief_facts("bid_notice", "committed", bid_published_at=date(2026, 6, 1))
     )
     assert "입찰공고는 2026.06.01에 나왔어요." in published
+    assert "공고로 이어질 가능성" not in published  # nothing left to estimate
+    assert "공고로 이어질 가능성: 72% 정도로 봐요" in brief
 
 
 def test_template_brief_quotes_speech_not_table_rows() -> None:
