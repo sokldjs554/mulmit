@@ -5,13 +5,17 @@
 [![CI](https://github.com/sokldjs554/procurement-forecast/actions/workflows/ci.yml/badge.svg)](https://github.com/sokldjs554/procurement-forecast/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
+![한 사업이 공고가 되기까지 — 의회 발언(2025.11) 때 알려 주고, 보통의 입찰 알림은 입찰공고(2026.06)에서야 알려 준다](docs/screenshots/hero-timeline.png)
+
 지자체 사업은 입찰공고 6~18개월 전에 **지방의회 회의록**("내년도 본예산에 반영하겠습니다")과 **세출예산서 세부사업**으로 먼저 모습을 드러냅니다. 발주 예측은 이 문서들을 매일 읽어 수요 신호를 뽑고, 원문 근거를 검증한 뒤, 발주계획 → 사전규격 → 입찰공고로 이어지는 하나의 **기회**로 묶어 공급 기업에 추천합니다.
 
 구조로 보면 **공개 데이터를 매일 수집·구조화해 기업마다 맞춤 추천하고 알리는 B2B SaaS**입니다: 수집(공공 API·누리집 크롤링) → 추출·검증(LLM + 원문 대조) → 추천 → 알림 → 구독·크레딧 과금.
 
-![기회 상세 — 의회 발언부터 사전규격까지 이어진 신호, 원문 근거 강조, 추천 이유, 금액 추이, 영업 브리핑](docs/screenshots/opportunity.png)
+**30초 둘러보기** — 랜딩에서 한 번 눌러 데모로 들어가, 기회 피드의 정렬과 단계별 건수를 보고, '입찰 진행' 탭에서 입찰공고 12개월 전에 찾아낸 사업을 열어 원문 근거가 칠해진 신호 타임라인을 본 뒤 영업 브리핑을 만듭니다.
 
-<sub>화면과 수치는 모두 합성 데모 데이터입니다(아래 [평가](#평가) 참고).</sub>
+![30초 둘러보기: 랜딩 → 데모 → 기회 피드 → 기회 상세 → 영업 브리핑](docs/screenshots/walkthrough.gif)
+
+<sub>화면과 수치는 모두 합성 데모 데이터입니다(아래 [평가](#평가) 참고). GIF와 스크린샷은 사례가 더 많은 `manage seed --scale 1.5` 세계에서 찍었고(기본 `make demo`는 1.0), LLM 키 없이 규칙 기반 추출기와 템플릿 브리핑으로 돌아갑니다.</sub>
 
 ---
 
@@ -192,6 +196,10 @@ flowchart LR
 첫 줄은 속도가 아니라 **정확성** 문제입니다. 전체 테이블 HNSW 인덱스에 상태 조건을 붙이면 pgvector가 `ef_search`(40)건을 찾은 뒤 필터를 적용해 결과가 조용히 줄어듭니다. 부분 인덱스 + `ef_search` 조정으로 고쳤고, 이 경로를 강제한 회귀 테스트가 있습니다. 전체 결과와 실행 계획: [docs/performance.md](docs/performance.md), 결정: [ADR-0010](docs/adr/0010-measure-at-volume.md).
 
 ## 화면
+
+**기회 상세** — 의회 발언부터 입찰공고까지 이어진 신호 6건, 원문 근거 강조, 추천 이유, 금액 추이, 영업 브리핑
+
+![기회 상세](docs/screenshots/opportunity.png)
 
 | 기회 피드 | 운영 개요 |
 |---|---|
