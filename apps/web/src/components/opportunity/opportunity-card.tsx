@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/primitives";
 import type { Schemas } from "@/lib/api/client";
-import { formatKRW, formatPercent, formatWindow, headStartLabel, leadLabel } from "@/lib/format";
+import { formatDate, formatKRW, formatPercent, formatWindow, headStartLabel, leadLabel } from "@/lib/format";
 import { STATUS_LABEL } from "@/lib/utils";
 
 import { StageRail } from "./stage-rail";
@@ -45,7 +45,9 @@ export function OpportunityCard({ item }: { item: Card }) {
             </span>
             <span className="inline-flex items-center gap-1">
               <CalendarClock className="size-3.5 text-muted" aria-hidden />
-              입찰 예상 {formatWindow(item.bid_window_start, item.bid_window_end)}
+              {item.bid_published_at
+                ? `입찰공고 ${formatDate(item.bid_published_at)}`
+                : `입찰 예상 ${formatWindow(item.bid_window_start, item.bid_window_end)}`}
             </span>
             <span className="inline-flex items-center gap-1">
               <Layers className="size-3.5 text-muted" aria-hidden />
@@ -73,9 +75,12 @@ export function OpportunityCard({ item }: { item: Card }) {
             </li>
           ))}
         </ul>
-        <span className="text-[12px] text-muted">
-          공고로 이어질 확률 <span className="font-semibold text-ink">{formatPercent(item.conversion_prob)}</span>
-        </span>
+        {/* once the tender is out there is no probability left to show */}
+        {item.bid_published_at ? null : (
+          <span className="text-[12px] text-muted">
+            공고로 이어질 확률 <span className="font-semibold text-ink">{formatPercent(item.conversion_prob)}</span>
+          </span>
+        )}
       </div>
     </Link>
   );

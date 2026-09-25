@@ -144,6 +144,7 @@ export default function OpportunityPage() {
 
   const lead = leadLabel(data.lead_days);
   const reached = data.signals.map((s) => s.stage);
+  const earlySignals = data.signals.filter((s) => s.stage !== "bid_notice" && s.stage !== "award").length;
   return (
     <div className="space-y-6">
       <Link href="/app" className="inline-flex items-center gap-1 text-[13px] text-ink-2 hover:text-ink">
@@ -178,7 +179,11 @@ export default function OpportunityPage() {
             sub={lead ? `입찰 ${lead}` : data.window_passed ? "예상 시기가 지났는데 아직 공고 전" : undefined}
           />
         )}
-        <StatTile label="공고로 이어질 확률" value={formatPercent(data.conversion_prob)} sub="지난 데이터로 보정" />
+        {data.bid_published_at ? (
+          <StatTile label="공고 전에 잡힌 신호" value={`${earlySignals}건`} sub="회의록·예산서·발주계획·사전규격" />
+        ) : (
+          <StatTile label="공고로 이어질 확률" value={formatPercent(data.conversion_prob)} sub="지난 데이터로 보정" />
+        )}
         <StatTile label="우리 회사 적합도" value={data.score !== null ? `${Math.round(data.score * 100)}점` : "–"} sub={`신호 ${data.signal_count}건`} />
       </div>
 

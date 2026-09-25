@@ -13,7 +13,7 @@ from datetime import date
 from xml.sax.saxutils import escape, quoteattr
 
 from app.domain.krw import format_krw
-from app.domain.stages import STAGE_LABEL, Stage
+from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage
 from app.domain.taxonomy import CATEGORIES, Category
 
 EXTRACT_PROMPT_VERSION = "extract-v3"
@@ -187,6 +187,14 @@ class BriefFacts:
     history: tuple[PastTender, ...] = ()
     profile: tuple[str, ...] = ()  # "- 소개: …" lines; empty when the org has no profile
 
+    @property
+    def tender_out(self) -> bool:
+        """The 입찰공고 is out: from here there is no forecast window and no probability to
+        estimate. Every surface of the brief decides this here."""
+        return (
+            self.bid_published_at is not None or STAGE_ORDER[self.stage] >= STAGE_ORDER[Stage.BID]
+        )
+
     def as_prompt(self) -> str:
         window = (
             f"{self.window_start} ~ {self.window_end or self.window_start}"
@@ -202,11 +210,16 @@ class BriefFacts:
             *([f"- 부서: {self.department}"] if self.department else []),
             f"- 현재 단계: {STAGE_LABEL[self.stage]} ({STATUS_KO.get(self.status, self.status)})",
             f"- 추정 예산: {format_krw(self.est_budget_krw) if self.est_budget_krw else '미상'}",
-            f"- 입찰 예상 시기: {window}"
-            + (" (이 기간이 지났지만 아직 입찰공고 없음)" if self.window_passed else ""),
-            *([f"- 입찰공고일: {self.bid_published_at}"] if self.bid_published_at else []),
+            *(
+                [f"- 입찰공고일: {self.bid_published_at or '날짜 미상'}"]
+                if self.tender_out
+                else [
+                    f"- 입찰 예상 시기: {window}"
+                    + (" (이 기간이 지났지만 아직 입찰공고 없음)" if self.window_passed else ""),
+                ]
+            ),
             f"- 가장 강한 의지 표현: {COMMITMENT_KO.get(self.best_commitment or '', '없음')}",
-            f"- 공고 전환 확률(추정): {self.conversion_prob:.0%}",
+            *([] if self.tender_out else [f"- 공고 전환 확률(추정): {self.conversion_prob:.0%}"]),
             "",
             "# 신호 (시간순, 원문 인용)",
         ]

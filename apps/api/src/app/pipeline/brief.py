@@ -229,9 +229,12 @@ def template_brief(facts: BriefFacts) -> str:
         if budget
         else "- 추정 예산: 아직 금액이 나온 문서가 없어요.",
         when,
-        f"- 공고로 이어질 가능성: {facts.conversion_prob:.0%} 정도로 봐요. 지금 단계와 의회 답변 수준, "
-        "같은 사업을 가리키는 문서 수로 매긴 추정치예요.",
     ]
+    if not facts.tender_out:  # once the tender is out there is nothing left to estimate
+        money.append(
+            f"- 공고로 이어질 가능성: {facts.conversion_prob:.0%} 정도로 봐요. 지금 단계와 의회 답변 "
+            "수준, 같은 사업을 가리키는 문서 수로 매긴 추정치예요."
+        )
     if facts.department:
         meet = [f"- {who}. 문서에 담당으로 나온 부서라서 여기부터 연락해 보세요."]
     elif who:
