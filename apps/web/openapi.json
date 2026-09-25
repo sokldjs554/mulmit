@@ -2790,6 +2790,11 @@
             ],
             "title": "Bid Published At"
           },
+          "tender_out": {
+            "type": "boolean",
+            "title": "Tender Out",
+            "default": false
+          },
           "conversion_prob": {
             "type": "number",
             "title": "Conversion Prob"
@@ -2981,6 +2986,11 @@
               }
             ],
             "title": "Bid Published At"
+          },
+          "tender_out": {
+            "type": "boolean",
+            "title": "Tender Out",
+            "default": false
           },
           "conversion_prob": {
             "type": "number",

@@ -13,11 +13,11 @@ from datetime import date
 from xml.sax.saxutils import escape, quoteattr
 
 from app.domain.krw import format_krw
-from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage
+from app.domain.stages import STAGE_LABEL, Stage, tender_is_out
 from app.domain.taxonomy import CATEGORIES, Category
 
 EXTRACT_PROMPT_VERSION = "extract-v3"
-BRIEF_PROMPT_VERSION = "brief-v3"
+BRIEF_PROMPT_VERSION = "brief-v4"
 
 _CATEGORY_LINES = "\n".join(
     f"- {cat.value}: {info.label} (예: {', '.join(info.keywords[:5])})"
@@ -122,7 +122,8 @@ the vendor's profile.
 Write in Korean, in Markdown, with exactly these sections:
 ## 한 줄 요약
 ## 지금까지의 경과  (a dated timeline built only from the given signals)
-## 예산과 시기  (amounts with their source; the forecast tender window and why)
+## 예산과 시기  (amounts with their source; when 입찰공고일 is given the tender is out — say so
+   and do not forecast; otherwise the forecast tender window and why)
 ## 누구를 만나야 하나  (departments and roles that appear in the evidence; never invent names)
 ## 제안 전략  (3–5 concrete actions for this vendor, tied to the evidence and the vendor profile)
 ## 리스크  (what could stop or delay it; weak commitment wording; budget changes)
@@ -191,9 +192,7 @@ class BriefFacts:
     def tender_out(self) -> bool:
         """The 입찰공고 is out: from here there is no forecast window and no probability to
         estimate. Every surface of the brief decides this here."""
-        return (
-            self.bid_published_at is not None or STAGE_ORDER[self.stage] >= STAGE_ORDER[Stage.BID]
-        )
+        return tender_is_out(self.stage, self.bid_published_at)
 
     def as_prompt(self) -> str:
         window = (
@@ -210,14 +209,10 @@ class BriefFacts:
             *([f"- 부서: {self.department}"] if self.department else []),
             f"- 현재 단계: {STAGE_LABEL[self.stage]} ({STATUS_KO.get(self.status, self.status)})",
             f"- 추정 예산: {format_krw(self.est_budget_krw) if self.est_budget_krw else '미상'}",
-            *(
-                [f"- 입찰공고일: {self.bid_published_at or '날짜 미상'}"]
-                if self.tender_out
-                else [
-                    f"- 입찰 예상 시기: {window}"
-                    + (" (이 기간이 지났지만 아직 입찰공고 없음)" if self.window_passed else ""),
-                ]
-            ),
+            f"- 입찰공고일: {self.bid_published_at or '날짜 미상'}"
+            if self.tender_out
+            else f"- 입찰 예상 시기: {window}"
+            + (" (이 기간이 지났지만 아직 입찰공고 없음)" if self.window_passed else ""),
             f"- 가장 강한 의지 표현: {COMMITMENT_KO.get(self.best_commitment or '', '없음')}",
             *([] if self.tender_out else [f"- 공고 전환 확률(추정): {self.conversion_prob:.0%}"]),
             "",

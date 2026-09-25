@@ -105,6 +105,7 @@ class OpportunityCard(BaseModel):
     # the forecast window's end has passed with no tender yet; the window is then shown as-is
     window_passed: bool = False
     bid_published_at: date | None
+    tender_out: bool = False  # 입찰공고 is out (by date or stage): nothing left to estimate
     conversion_prob: float
     signal_count: int
     first_seen_at: date

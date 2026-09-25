@@ -28,14 +28,15 @@ const FEATURE_LABEL: Record<string, string> = {
   lead_time: "영업할 수 있는 시간",
 };
 
-function Why({ breakdown }: { breakdown: Record<string, unknown> | null | undefined }) {
+function Why({ breakdown, tenderOut }: { breakdown: Record<string, unknown> | null | undefined; tenderOut: boolean }) {
   const features = (breakdown?.features ?? {}) as Record<string, number>;
   const weights = (breakdown?.weights ?? {}) as Record<string, number>;
   const data = Object.keys(FEATURE_LABEL)
     .filter((k) => k in features)
     .map((k) => ({
       key: k,
-      label: FEATURE_LABEL[k] ?? k,
+      // once the tender is out, the conversion feature is a fact (1.0), not a likelihood
+      label: k === "conversion" && tenderOut ? "입찰공고가 나옴" : (FEATURE_LABEL[k] ?? k),
       value: (features[k] ?? 0) * (weights[k] ?? 0) * 100,
       note: `${Math.round((features[k] ?? 0) * 100)}점 × 비중 ${Math.round((weights[k] ?? 0) * 100)}%`,
     }))
@@ -144,7 +145,10 @@ export default function OpportunityPage() {
 
   const lead = leadLabel(data.lead_days);
   const reached = data.signals.map((s) => s.stage);
-  const earlySignals = data.signals.filter((s) => s.stage !== "bid_notice" && s.stage !== "award").length;
+  // by date, not by stage: council minutes about a tender already out do not count as early
+  const earlySignals = data.bid_published_at
+    ? data.signals.filter((s) => s.observed_at < (data.bid_published_at as string)).length
+    : 0;
   return (
     <div className="space-y-6">
       <Link href="/app" className="inline-flex items-center gap-1 text-[13px] text-ink-2 hover:text-ink">
@@ -170,7 +174,7 @@ export default function OpportunityPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="추정 예산" value={formatKRW(data.est_budget_krw)} sub="가장 진행된 단계의 문서 기준" />
-        {data.bid_published_at ? (
+        {data.tender_out ? (
           <StatTile label="입찰공고" value={formatDate(data.bid_published_at)} sub="나라장터에 올라온 날" />
         ) : (
           <StatTile
@@ -179,8 +183,8 @@ export default function OpportunityPage() {
             sub={lead ? `입찰 ${lead}` : data.window_passed ? "예상 시기가 지났는데 아직 공고 전" : undefined}
           />
         )}
-        {data.bid_published_at ? (
-          <StatTile label="공고 전에 잡힌 신호" value={`${earlySignals}건`} sub="회의록·예산서·발주계획·사전규격" />
+        {data.tender_out ? (
+          <StatTile label="공고 전에 잡힌 신호" value={`${earlySignals}건`} sub="입찰공고일보다 먼저 나온 문서" />
         ) : (
           <StatTile label="공고로 이어질 확률" value={formatPercent(data.conversion_prob)} sub="지난 데이터로 보정" />
         )}
@@ -206,7 +210,7 @@ export default function OpportunityPage() {
           <Card>
             <CardHeader title="추천한 이유" />
             <div className="px-5 pt-3 pb-5">
-              <Why breakdown={data.breakdown} />
+              <Why breakdown={data.breakdown} tenderOut={data.tender_out ?? false} />
             </div>
           </Card>
           {data.budget_trajectory.length >= 2 ? (
