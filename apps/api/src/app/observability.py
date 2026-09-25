@@ -7,16 +7,37 @@ from typing import Any
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
+from sentry_sdk.scrubber import DEFAULT_DENYLIST, EventScrubber
 from sentry_sdk.types import Event, Hint
 
 from app import __version__
+from app.log import redact_secrets
 from app.settings import Settings
 
 _SCRUB_KEYS = {"authorization", "cookie", "billing_key", "password", "service_key", "secret"}
 
+# Names whose values Sentry's own scrubber replaces wherever they appear as keys — request data,
+# and (recursive) stack-frame local variables such as ``service_key`` or ``params["serviceKey"]``.
+_DENYLIST = [*DEFAULT_DENYLIST, "service_key", "servicekey", "key", "billing_key", "api_key"]
+
+
+def event_scrubber() -> EventScrubber:
+    return EventScrubber(denylist=_DENYLIST, recursive=True)
+
+
+def _redact_strings(data: Any) -> None:
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if isinstance(v, str):
+                data[k] = redact_secrets(v)
+
 
 def _scrub(event: Event, _hint: Hint) -> Event | None:
-    """Never ship credentials (Toss billing keys, data.go.kr service keys) to Sentry."""
+    """Never ship credentials (Toss billing keys, public-data API keys) to Sentry.
+
+    Registered for errors *and* transactions: the httpx integration puts each call's query
+    string into breadcrumb and span data (``http.query``), where ``serviceKey=`` lives.
+    """
     request: dict[str, Any] = event.get("request") or {}
     headers = request.get("headers") or {}
     for key in list(headers):
@@ -24,10 +45,18 @@ def _scrub(event: Event, _hint: Hint) -> Event | None:
             headers[key] = "[scrubbed]"
     breadcrumbs: Any = event.get("breadcrumbs") or {}
     for crumb in breadcrumbs.get("values", []) if isinstance(breadcrumbs, dict) else []:
-        data = crumb.get("data") or {}
-        url = data.get("url")
-        if isinstance(url, str) and "serviceKey=" in url:
-            data["url"] = url.split("serviceKey=")[0] + "serviceKey=[scrubbed]"
+        _redact_strings(crumb.get("data"))
+        if isinstance(crumb.get("message"), str):  # log records, e.g. source.retry
+            crumb["message"] = redact_secrets(crumb["message"])
+    spans: Any = event.get("spans") or []
+    for span in spans if isinstance(spans, list) else []:
+        _redact_strings(span.get("data"))
+        description = span.get("description")
+        if isinstance(description, str):
+            span["description"] = redact_secrets(description)
+    for exc in (event.get("exception") or {}).get("values", []):
+        if isinstance(exc.get("value"), str):
+            exc["value"] = redact_secrets(exc["value"])
     return event
 
 
@@ -47,6 +76,8 @@ def init_sentry(settings: Settings, *, component: str) -> bool:
         send_default_pii=False,
         integrations=integrations,
         before_send=_scrub,
+        before_send_transaction=_scrub,
+        event_scrubber=event_scrubber(),
     )
     sentry_sdk.set_tag("component", component)
     return True

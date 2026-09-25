@@ -58,6 +58,10 @@ test: ## API tests (needs `make infra`) and web unit tests
 eval: ## Evaluate extraction/linking/OCR against ground truth and write docs/evaluation.md
 	cd $(API) && uv run manage eval all --record --report ../../docs/evaluation.md
 
+.PHONY: check-sources
+check-sources: ## First real call to each 조달청 operation (needs APP_DATA_GO_KR_SERVICE_KEY) → docs/source-check.md
+	cd $(API) && uv run manage sources check --report ../../docs/source-check.md > /dev/null
+
 .PHONY: eval-llm
 eval-llm: ## Compare Claude models/efforts on the hand-written set (needs ANTHROPIC_API_KEY, ~$5; see --dry-run)
 	mkdir -p .data && cd $(API) && uv run manage eval llm --report ../../docs/evaluation-llm.md > ../../.data/eval-llm.json

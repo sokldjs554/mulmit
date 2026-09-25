@@ -22,7 +22,7 @@ from typing import Any
 
 import httpx
 
-from app.log import get_logger
+from app.log import get_logger, redact_secrets
 from app.sources.resilience import (
     Breaker,
     Limiter,
@@ -33,6 +33,7 @@ from app.sources.resilience import (
 log = get_logger(__name__)
 
 RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
+
 
 # data.go.kr common error codes (공공데이터포털 OpenAPI 에러코드 표)
 _DGK_QUOTA_CODES = {"22"}  # LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR
@@ -180,12 +181,14 @@ class ResilientClient:
                     source=self.source,
                     attempt=attempt + 1,
                     delay=round(delay, 2),
-                    error=str(exc),
+                    error=str(exc),  # app.log redacts credentials in every log line
                 )
                 await self._sleep(delay)
         assert last_exc is not None
         raise TransientSourceError(
-            f"{self.source}: gave up after {self._max_attempts} attempts: {last_exc}"
+            redact_secrets(
+                f"{self.source}: gave up after {self._max_attempts} attempts: {last_exc}"
+            )
         ) from last_exc
 
     async def _read_capped(

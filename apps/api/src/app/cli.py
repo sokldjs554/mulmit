@@ -6,6 +6,7 @@ manage demo run                   # full pipeline over the synthetic world, in-p
 manage eval all --record          # extraction / linking / OCR / realistic-set evals
 manage eval llm --dry-run         # Claude model × effort comparison on the hand-written set
 manage bench --report ../../docs/performance.md   # hot-query plans at volume
+manage sources check              # first real call to each 조달청 operation (needs the data.go.kr key)
 manage worker                     # arq worker + cron (+ /healthz on $PORT for Cloud Run)
 manage openapi > openapi.json     # schema for the web app's generated types
 """
@@ -31,9 +32,11 @@ app = typer.Typer(help="발주 예측 operations CLI", no_args_is_help=True)
 db_app = typer.Typer(help="Database")
 demo_app = typer.Typer(help="Synthetic demo world")
 eval_app = typer.Typer(help="Evaluations")
+sources_app = typer.Typer(help="External data sources")
 app.add_typer(db_app, name="db")
 app.add_typer(demo_app, name="demo")
 app.add_typer(eval_app, name="eval")
+app.add_typer(sources_app, name="sources")
 
 T = TypeVar("T")
 
@@ -134,7 +137,7 @@ def eval_all(
 ) -> None:
     """Extraction, triage, linking and OCR metrics against the synthetic ground truth, plus the
     hand-written realistic set."""
-    configure_logging(json=False, level="WARNING")
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
 
     async def go(session: Any, runtime: Any) -> dict[str, Any]:
         from app.eval.runner import run_all_evals
@@ -166,7 +169,7 @@ def eval_llm(
     from app.eval.llm_compare import DEFAULT_CANDIDATES, Candidate, compare, estimate, render
     from app.eval.realistic import load_realistic
 
-    configure_logging(json=False, level="WARNING")
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
     try:
         candidates = [Candidate.parse(m) for m in (model or DEFAULT_CANDIDATES)]
     except ValueError as exc:
@@ -218,6 +221,44 @@ def eval_llm(
     typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
 
 
+@sources_app.command("check")
+def sources_check(
+    source: list[str] = typer.Option(
+        None, "--source", "-s", help="g2b_order_plan | g2b_prespec | g2b_bid (default: all)"
+    ),
+    days: int = typer.Option(7, min=1, max=31, help="Look back this many days"),
+    rows: int = typer.Option(20, min=1, max=100, help="Items per call"),
+    report: Path = typer.Option(None, help="Write a Markdown report here"),
+) -> None:
+    """Call each 조달청 operation once with APP_DATA_GO_KR_SERVICE_KEY and check that the
+    adapter can read what comes back. No database needed; nothing is stored.
+
+    Exits 1 when any call failed or an operation's items could not be mapped."""
+    from app.sources.check import as_json, check_g2b, problems, render
+    from app.sources.g2b import OPERATIONS
+
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
+    if unknown := sorted(set(source or ()) - set(OPERATIONS)):
+        raise typer.BadParameter(
+            f"unknown {', '.join(unknown)}; one of {', '.join(OPERATIONS)}", param_hint="--source"
+        )
+    secret = get_settings().data_go_kr_service_key
+    if secret is None:
+        typer.echo("APP_DATA_GO_KR_SERVICE_KEY is not set (.env or environment)", err=True)
+        raise typer.Exit(2)
+    key = secret.get_secret_value()
+    checks = _run(lambda: check_g2b(key, sources=source or None, days=days, rows=rows))
+    for c in checks:
+        status = f"{c.mapped}/{c.items} mapped (total {c.total})" if c.ok else f"FAILED {c.error}"
+        typer.echo(f"{c.path.rsplit('/', 1)[-1]:<36} {status}", err=True)
+    if report is not None:
+        report.write_text(render(checks, days=days), encoding="utf-8")
+    typer.echo(json.dumps(as_json(checks), ensure_ascii=False, indent=2, default=str))
+    if issues := problems(checks):
+        typer.echo(f"{len(issues)} problem(s); see the report", err=True)
+        raise typer.Exit(1)
+
+
 @app.command()
 def bench(
     scale: float = typer.Option(1.0, help="Multiply the default row counts"),
@@ -227,7 +268,7 @@ def bench(
     between the initial schema and head (see docs/performance.md)."""
     from app.bench import SIZES, run_bench
 
-    configure_logging(json=False, level="WARNING")
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
     sizes = {k: max(1, int(v * scale)) for k, v in SIZES.items()}
     results = _run(lambda: run_bench(sizes, report, log=typer.echo))
     typer.echo(json.dumps(results, ensure_ascii=False, indent=2, default=str))
@@ -246,7 +287,7 @@ def openapi() -> None:
     """Print the OpenAPI schema (used to generate the web app's TypeScript types)."""
     from app.api.app import create_app
 
-    configure_logging(json=False, level="WARNING")
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
     typer.echo(json.dumps(create_app().openapi(), ensure_ascii=False, indent=2))
 
 
