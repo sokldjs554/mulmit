@@ -71,7 +71,7 @@
 | 작업 큐(Redis)와 cron 잡 위에서 도는 대용량 배치 파이프라인 설계·개선 | arq 워커 + KST cron(매시 조달, 매일 회의록, 매주 예산서, 10분 스윕, 아침 요약), 작업 ID 중복 제거, 한도 초과·서킷·일시 오류별 재시도, 종료 신호 시 재시도로 기록, 실행 이력 `job_runs` | [`worker/`](apps/api/src/app/worker), [ADR-0003](docs/adr/0003-arq-and-in-worker-cron.md) |
 | PostgreSQL 스키마 설계와 마이그레이션, 대용량 데이터 환경에서의 쿼리 최적화 | 24개 테이블, Alembic 비동기 마이그레이션. 공고 10만·신호 40만 건 벤치로 찾은 문제를 마이그레이션 0002로 해결: 벡터 후보 **13건·재현율 4% → 300건·100%**, 참조번호 조회 **87ms → 0.02ms**, 운영 집계 173 → 124ms. 인덱스는 `CONCURRENTLY` | [`migrations/`](apps/api/migrations), [performance.md](docs/performance.md), [ADR-0010](docs/adr/0010-measure-at-volume.md) |
 | Next.js·TypeScript 기반 사용자 웹과 운영자 콘솔(admin) 화면 개발 | 고객 앱(피드·기회 상세·프로필·알림·요금) + 운영 콘솔(개요·수집원·작업 로그·검토 대기열·LLM 비용·평가) | [`apps/web`](apps/web) |
-| LLM 파이프라인 개선 (프롬프트 설계, 구조화 출력, 결과 검증, 품질 평가, 비용 최적화) | 구조화 출력(엄격 JSON 스키마), 프롬프트 캐싱, effort 조절, 원문 근거 검증기, 합성 정답·수기 세트(54건) 평가, 모델·effort별 정확도·비용·지연 비교(`manage eval llm`, 사용액 상한), 트리아지(청크 59% LLM 생략)·해시 캐시·일일 예산 가드 | [`llm/`](apps/api/src/app/llm), [`grounding.py`](apps/api/src/app/domain/grounding.py), [`eval/`](apps/api/src/app/eval), [ADR-0002](docs/adr/0002-grounded-extraction.md), [ADR-0006](docs/adr/0006-one-model-low-effort.md) |
+| LLM 파이프라인 개선 (프롬프트 설계, 구조화 출력, 결과 검증, 품질 평가, 비용 최적화) | 구조화 출력(엄격 JSON 스키마), 프롬프트 캐싱, effort 조절, 원문 근거 검증기, 합성 정답·수기 세트(54건) 평가, 모델·effort별 정확도·비용·지연 실측(Opus 5 low: 재현율 46% → 100%, 청크당 $0.0107; 측정으로 금액 파서 버그 발견·수정), 트리아지(청크 59% LLM 생략)·해시 캐시·일일 예산 가드 | [`llm/`](apps/api/src/app/llm), [`grounding.py`](apps/api/src/app/domain/grounding.py), [`eval/`](apps/api/src/app/eval), [ADR-0002](docs/adr/0002-grounded-extraction.md), [ADR-0006](docs/adr/0006-one-model-low-effort.md) |
 | 비정형 문서 파싱과 OCR 파이프라인 정확도 개선 | PDF 페이지별 텍스트층 판정 → 부족한 페이지만 OCR(tesseract `kor+eng`) + 후보정(문자 오류율 1.13% → 0.99%, 금액 100%), HWP5 레코드 파서, HWPX | [`parsing/`](apps/api/src/app/parsing) |
 | 멀티채널 알림 발송(이메일·메신저)과 구독·크레딧 결제 도메인 개발 | 이메일·Slack·카카오 알림톡, 중복 방지·방해 금지 시간. 토스 정기결제(빌링키 암호화, 멱등 결제, 웹훅 대사, 1·3·7일 재시도) + 추가 전용 크레딧 원장 | [`notify/`](apps/api/src/app/notify), [`billing/`](apps/api/src/app/billing), [ADR-0005](docs/adr/0005-credit-ledger.md) |
 | 클라우드 컨테이너 서비스 배포·운영과 로깅·에러 트래킹 기반 장애 대응 | Docker 이미지 2개, GCP Cloud Run(API 내부 전용·워커 헬스체크)·Cloud SQL·Memorystore Terraform, 키 없는 배포(WIF), structlog JSON, Sentry, 런북 | [`infra/`](infra/terraform), [배포 워크플로](.github/workflows/deploy.yml), [런북](docs/runbook.md) |
@@ -156,7 +156,26 @@ flowchart LR
 
 - 합성 세계 점수는 **파이프라인이 설계대로 동작한다는 증거일 뿐 실제 정확도가 아닙니다.** 같은 사람이 만든 생성기와 추출기는 같은 가정을 공유합니다. 수기 세트의 재현율 46.0%가 규칙 기반 추출기의 실제 한계에 더 가깝고, LLM 경로가 메워야 할 간격입니다.
 - 전체 리포트: [docs/evaluation.md](docs/evaluation.md) (`make eval`로 재생성).
-- **Claude 모델 비교**: `make eval-llm`이 같은 수기 세트를 규칙 기반·Opus 5(low·medium)·Sonnet 5(low)·Haiku 4.5로 돌려 정밀도·재현율·필드 정확도(검증기 통과 후), 검증기가 버리거나 고친 신호 수, 건당·1,000건당 비용, 지연 p50/p95를 [docs/evaluation-llm.md](docs/evaluation-llm.md)에 씁니다. API 키가 필요하고 한 번에 약 5달러이며(`--dry-run`으로 먼저 추정), `--max-usd`를 넘으면 호출을 멈춥니다. 로컬 대신 GitHub Actions의 **LLM eval** 워크플로(수동 실행, 저장소 시크릿 `ANTHROPIC_API_KEY`)로 돌리면 결과가 `eval/llm-<실행 번호>.<시도>` 브랜치(예: `eval/llm-3.1`)로 올라와 PR로 검토합니다.
+
+### Claude 실측 (수기 세트 54건)
+
+같은 수기 세트를 실제 Claude API로 돌린 결과입니다([LLM eval #3](https://github.com/sokldjs554/procurement-forecast/actions/runs/36158136197), 전체 표: [docs/evaluation-llm.md](docs/evaluation-llm.md)). 점수는 원문 근거 검증기를 거쳐 **저장되는 값** 기준입니다.
+
+측정 방법: `make eval-llm`이 수기 세트를 추출기마다 돌려 정확도, 검증기가 버리거나 고친 신호 수, 비용, 지연을 기록합니다. `--dry-run` 추정은 출력 토큰을 넉넉히 잡아 약 5달러로 나오지만 실제 한 실행은 $1.65였고, `--max-usd`를 넘으면 호출을 멈춥니다. GitHub Actions의 **LLM eval** 워크플로(수동 실행, 저장소 시크릿 `ANTHROPIC_API_KEY`)로 돌리면 결과가 `eval/llm-<실행 번호>.<시도>` 브랜치로 올라와 PR로 검토합니다.
+
+| 추출기 | 정밀도 | 재현율 | 금액 | 연도 | 발언 강도 | 분야 | 청크당 비용 | 지연 p50 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 규칙 기반 | 92.0% | 46.0% | 78.3% | 91.3% | 82.6% | 82.6% | $0 | – |
+| **Opus 5 · low (기본값)** | **100%** | **100%** | **100%** | 98.0% | 98.0% | 86.0% | $0.0107 | 4.5초 |
+| Opus 5 · medium | 100% | 100% | 100% | 98.0% | 98.0% | 90.0% | $0.0110 | 4.7초 |
+| Sonnet 5 · low | 100% | 98.0% | 100% | 98.0% | 98.0% | 87.8% | $0.0042 | 3.6초 |
+| Haiku 4.5 | 100% | 92.0% | 100% | 97.8% | 91.3% | 76.1% | $0.0046 | 3.4초 |
+
+- **측정이 버그를 찾았습니다.** 첫 실행([LLM eval #2](https://github.com/sokldjs554/procurement-forecast/actions/runs/36156552633))에서 "2억 8천 정도"를 Claude는 모두 2억 8천만 원으로 맞혔는데, 금액 파서가 200,008,000으로 읽어 검증기가 맞는 답을 틀린 값으로 덮어썼습니다(저장 금액 정확도 98%). 파서를 고치고([#10](https://github.com/sokldjs554/procurement-forecast/pull/10)) 다시 돌려 100%가 됐고, 규칙 기반 추출기의 금액 정확도도 73.9% → 78.3%로 올랐습니다.
+- **effort는 low 유지**: medium은 비용만 조금 늘고 나아진 필드가 없습니다. 분야 정확도는 같은 설정으로 다시 돌리면 2~6%p 달라졌습니다(실행 #2 → #3: Opus low 88 → 86%, Opus medium 86 → 90%, Haiku 82 → 76%, [#2 보고서](https://github.com/sokldjs554/procurement-forecast/blob/eval/llm-2.1/docs/evaluation-llm.md)). 그래서 50건 규모에서 1~2건 차이는 우열로 읽지 않습니다.
+- **더 싼 모델**: Sonnet 5 low는 비용 39%에 재현율이 1건 낮습니다(r35: 무인 대출기 추가 요청에 구청이 "당분간 계획이 없다"고 한 거절 발언, 두 실행 모두). Haiku 4.5는 토큰 단가가 싸지만 시스템 프롬프트(약 1,400토큰)가 Haiku의 캐시 최소 길이(4,096토큰)보다 짧아 캐시가 전혀 안 걸려(Opus·Sonnet은 입력의 92%가 캐시 읽기) Sonnet보다 비쌉니다. 선택 기준은 [ADR-0006](docs/adr/0006-one-model-low-effort.md).
+- **가장 약한 필드는 분야 분류**입니다. 틀린 사례 대부분이 "AI 민원상담 챗봇 → AI·데이터(정답: 공공 SW)"처럼 용도가 아니라 기술 단어로 분류한 경우입니다. 같은 세트로 프롬프트를 고치면 이 세트에만 맞추게 되므로, 새 사례를 따로 모은 뒤 고칩니다.
+- 수기 세트는 이 저장소에서 직접 작성한 문장이라 실제 회의록의 분포와 다릅니다. 두 번 실행한 비용은 합계 $3.30입니다.
 
 ## 대용량 쿼리
 
@@ -250,7 +269,7 @@ docs/                 조사, ADR, 아키텍처, 평가, 데이터 소스, 런�
 솔직하게 적습니다.
 
 - **실제 공공 API와 기관 누리집은 호출해 보지 못했습니다.** 개발 환경의 네트워크 정책으로 `clik.nanet.go.kr`·`data.go.kr`·`lofin.mois.go.kr`에 접속할 수 없어, 경로·필드는 공개 명세와 공개 저장소를 근거로 작성하고 계약 픽스처로만 검증했습니다. 크롤러도 합성 누리집에서만 검증했습니다. 키가 생기면 `make check-sources`가 조달청 오퍼레이션 9개를 한 번씩 호출해 필드 대응을 점검합니다. 어긋나는 필드명은 조달청은 `g2b.py`의 `map_item`에서, CLIK·지방재정365는 설정(`sources.config`)으로 코드 수정 없이 고칩니다.
-- **Claude 경로의 품질은 아직 측정 전입니다.** 요청 형태·오류 매핑·폴백은 테스트했고, 실측 도구(`make eval-llm`)와 54건 수기 세트를 준비했지만 이 저장소의 수치는 아직 규칙 기반 추출기 것뿐입니다.
+- **Claude 품질은 수기 세트 54건으로만 측정했습니다.** 재현율 100%·금액 100%는 직접 작성한 문장 기준이고, 실제 회의록 분포에서는 낮아질 수 있습니다. 실데이터가 들어오면 검토 대기열의 판정을 정답 세트로 쌓아 다시 잽니다.
 - **대용량 벤치는 합성 데이터입니다.** 주제별로 뭉친 벡터와 균등한 기관 분포는 실제와 다릅니다. 실데이터가 쌓이면 `pg_stat_statements` 상위 쿼리로 다시 측정해야 합니다.
 - **인프라는 검증까지만 했습니다.** Terraform은 `validate`를 통과했고 CI가 이미지를 빌드하지만, 실제 GCP 프로젝트에 적용하지는 않았습니다.
 - **법·약관 검토 필요**: 공공누리 유형, 회의록 발언자 실명 표시 범위, 자동결제 약관.
