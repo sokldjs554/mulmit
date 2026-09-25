@@ -3,6 +3,8 @@ from datetime import date
 from sqlalchemy import func, select
 
 from app.db.models import (
+    JobRun,
+    Notification,
     Opportunity,
     OpportunitySignal,
     Recommendation,
@@ -117,3 +119,27 @@ async def test_job_cancelled_by_shutdown_is_recorded_as_retrying(demo_world) -> 
     assert run is not None
     assert run.status == "retrying"
     assert run.finished_at is not None
+
+
+async def test_demo_run_leaves_job_history_and_a_morning_digest(demo_world) -> None:  # type: ignore[no-untyped-def]
+    async with session_scope() as s:
+        demo = JobRun.job_id.like("demo:%")  # other tests in this database run jobs too
+        jobs = dict(
+            (
+                await s.execute(select(JobRun.job, func.count()).where(demo).group_by(JobRun.job))
+            ).all()
+        )
+        assert jobs.get("process_document", 0) == demo_world.documents
+        assert jobs.get("link_signals") == 1 and jobs.get("deliver_notifications") == 1
+        failed = select(JobRun).where(demo, JobRun.status != "succeeded")
+        assert not (await s.scalars(failed)).all()
+        digests = (
+            await s.scalars(
+                select(Notification).where(
+                    Notification.payload["headline"].astext.like("09월 25일%")
+                )
+            )
+        ).all()
+        assert digests and all(n.kind == "daily" and n.payload["items"] for n in digests)
+        # Sent when a mail server answers (Mailpit), otherwise left for retry — never faked.
+        assert {n.status for n in digests} <= {"sent", "pending"}

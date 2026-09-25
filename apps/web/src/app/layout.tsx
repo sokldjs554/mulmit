@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 
+// Self-hosted Pretendard (unicode-range subsets, so a page only downloads the glyphs it uses):
+// no third-party request, and it renders the same behind proxies and in CI screenshots.
+import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -24,10 +27,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="ko" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
-        />
       </head>
       <body className="min-h-dvh">
         <Providers>{children}</Providers>
