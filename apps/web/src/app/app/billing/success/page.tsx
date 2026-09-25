@@ -27,7 +27,7 @@ function Exchange() {
   if (register.error) return <ErrorNote error={register.error} />;
   return (
     <div className="space-y-3">
-      <p className="text-sm text-ink-2">카드를 등록하고 있습니다…</p>
+      <p className="text-sm text-ink-2">카드를 등록하고 있어요…</p>
       <Skeleton className="h-24" />
     </div>
   );

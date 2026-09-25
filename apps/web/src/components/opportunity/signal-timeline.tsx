@@ -31,10 +31,10 @@ const PARSE_LABEL: Record<string, string> = {
 
 function linkLabel(link: Signal["link"]): string | null {
   if (!link) return null;
-  if (link.method === "seed") return "이 기회의 첫 신호";
-  if (link.method === "ref") return "공고 번호로 연결";
+  if (link.method === "seed") return "처음 잡힌 신호";
+  if (link.method === "ref") return "공고 번호로 이어짐";
   const pct = Math.round(link.score * 100);
-  return `${link.tentative ? "잠정 " : ""}유사도 ${pct}점으로 연결`;
+  return `사업명 유사도 ${pct}점으로 이어짐${link.tentative ? " (확인 중)" : ""}`;
 }
 
 export function SignalTimeline({ signals }: { signals: Signal[] }) {

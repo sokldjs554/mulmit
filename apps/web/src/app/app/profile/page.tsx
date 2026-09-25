@@ -41,14 +41,14 @@ function ProfileForm({ initial }: { initial: Schemas["ProfileIO"] }) {
     e.preventDefault();
     save.mutate(
       { ...form, budget_min: fromEok(budgetMin), budget_max: fromEok(budgetMax) },
-      { onSuccess: () => toast("good", "저장했습니다. 추천을 다시 계산하고 있습니다.") },
+      { onSuccess: () => toast("good", "저장했어요. 추천을 새로 계산하는 중이에요.") },
     );
   };
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <Card>
-        <CardHeader title="무엇을 파나요?" description="의미 검색에 쓰입니다. 제품·서비스와 주요 레퍼런스를 적어 주세요." />
+        <CardHeader title="무엇을 파나요?" description="이 소개와 비슷한 사업을 찾아서 추천해요. 파는 제품이나 서비스, 대표 납품 실적을 적어 주세요." />
         <div className="space-y-5 p-5">
           <Field label="회사 소개" htmlFor="description">
             <Textarea
@@ -59,7 +59,7 @@ function ProfileForm({ initial }: { initial: Schemas["ProfileIO"] }) {
               maxLength={2000}
             />
           </Field>
-          <Field label="관심 키워드" htmlFor="keywords" hint="Enter로 추가합니다. 공고명·예산서 세부사업명에 나올 단어가 좋습니다.">
+          <Field label="관심 키워드" htmlFor="keywords" hint="Enter로 하나씩 추가해요. 공고명이나 예산서 사업명에 실제로 나올 법한 단어가 잘 맞아요.">
             <TagInput
               id="keywords"
               value={form.keywords ?? []}
@@ -67,7 +67,7 @@ function ProfileForm({ initial }: { initial: Schemas["ProfileIO"] }) {
               placeholder="스마트쉘터, 선별관제, 디지털트윈…"
             />
           </Field>
-          <Field label="제외 키워드" htmlFor="excludes" hint="이 단어가 들어간 기회는 순위를 크게 낮춥니다.">
+          <Field label="제외 키워드" htmlFor="excludes" hint="이 단어가 들어간 사업은 순위를 한참 뒤로 내려요.">
             <TagInput
               id="excludes"
               value={form.exclude_keywords ?? []}
@@ -94,8 +94,8 @@ function ProfileForm({ initial }: { initial: Schemas["ProfileIO"] }) {
             htmlFor="regions"
             hint={
               limit === null
-                ? "선택하지 않으면 전국을 봅니다."
-                : `현재 플랜은 ${limit}개까지 선택할 수 있습니다. 선택하지 않으면 전국을 봅니다.`
+                ? "안 고르면 전국을 다 봐요."
+                : `지금 플랜에서는 ${limit}곳까지 고를 수 있어요. 안 고르면 전국을 다 봐요.`
             }
           >
             <ChipGroup
@@ -104,7 +104,7 @@ function ProfileForm({ initial }: { initial: Schemas["ProfileIO"] }) {
               value={form.region_codes ?? []}
               onChange={(next) => {
                 if (limit !== null && next.length > limit) {
-                  toast("critical", `현재 플랜은 관심 지역을 ${limit}개까지 설정할 수 있습니다`);
+                  toast("critical", `지금 플랜에서는 관심 지역을 ${limit}곳까지만 고를 수 있어요`);
                   return;
                 }
                 setForm({ ...form, region_codes: next });
@@ -138,11 +138,11 @@ function ProfileContent() {
   const welcome = params.get("welcome") === "1";
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader title="회사 프로필" description="이 정보로 어떤 공공 수요가 우리 회사 기회인지 판단합니다." />
+      <PageHeader title="회사 프로필" description="여기 적은 내용을 보고 우리 회사에 맞는 사업을 골라요." />
       {welcome ? (
         <div className="flex items-start gap-3 rounded-xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm text-ink">
           <Sparkles className="mt-0.5 size-4 shrink-0 text-accent-text" aria-hidden />
-          가입을 환영합니다. 키워드와 분야를 저장하면 지방의회 회의록·예산서·나라장터에서 찾은 신호로 맞춤 피드를 만들어 드립니다.
+          반가워요! 파는 제품과 관심 분야만 알려 주시면, 의회 회의록·예산서·나라장터에서 찾은 사업으로 맞춤 피드를 바로 만들어 드릴게요.
         </div>
       ) : null}
       {profile.isLoading ? <Skeleton className="h-96" /> : profile.data ? <ProfileForm initial={profile.data} /> : <ErrorNote error={profile.error} />}

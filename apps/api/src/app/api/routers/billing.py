@@ -39,13 +39,11 @@ IdempotencyKey = Annotated[str, Header(alias="Idempotency-Key", min_length=8, ma
 
 def _payment_error(exc: Exception) -> HTTPException:
     if isinstance(exc, PaymentDeclinedError):
-        return HTTPException(
-            status.HTTP_402_PAYMENT_REQUIRED, f"결제가 거절되었습니다: {exc.message}"
-        )
+        return HTTPException(status.HTTP_402_PAYMENT_REQUIRED, f"결제가 거절됐어요 ({exc.message})")
     if isinstance(exc, PaymentUnavailableError):
         return HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "결제사 응답이 지연되고 있습니다. 잠시 후 확인해 주세요",
+            "결제사 응답이 늦어지고 있어요. 조금 뒤에 결제 내역을 확인해 주세요",
         )
     return HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
 

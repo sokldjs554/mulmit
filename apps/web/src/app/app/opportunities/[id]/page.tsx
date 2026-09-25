@@ -19,13 +19,13 @@ import { formatDate, formatDateTime, formatKRW, formatPercent, formatWindow, lea
 import { STATUS_LABEL } from "@/lib/utils";
 
 const FEATURE_LABEL: Record<string, string> = {
-  semantic: "회사 소개와의 의미 유사도",
-  keyword: "관심 키워드 일치",
+  semantic: "회사 소개와 얼마나 비슷한지",
+  keyword: "관심 키워드",
   category: "관심 분야",
   region: "관심 지역",
-  budget: "선호 예산 범위",
-  conversion: "공고 전환 가능성",
-  lead_time: "영업 가능한 선행 기간",
+  budget: "원하는 사업 규모",
+  conversion: "공고로 이어질 가능성",
+  lead_time: "영업할 수 있는 시간",
 };
 
 function Why({ breakdown }: { breakdown: Record<string, unknown> | null | undefined }) {
@@ -37,15 +37,15 @@ function Why({ breakdown }: { breakdown: Record<string, unknown> | null | undefi
       key: k,
       label: FEATURE_LABEL[k] ?? k,
       value: (features[k] ?? 0) * (weights[k] ?? 0) * 100,
-      note: `신호 ${Math.round((features[k] ?? 0) * 100)}점 × 가중치 ${Math.round((weights[k] ?? 0) * 100)}%`,
+      note: `${Math.round((features[k] ?? 0) * 100)}점 × 비중 ${Math.round((weights[k] ?? 0) * 100)}%`,
     }))
     .sort((a, b) => b.value - a.value);
-  if (!data.length) return <p className="text-sm text-muted">이 기회는 아직 우리 회사 기준으로 채점되지 않았습니다.</p>;
+  if (!data.length) return <p className="text-sm text-muted">아직 우리 회사 기준으로 점수를 매기지 않은 사업이에요.</p>;
   return (
     <BarList
       data={data}
       format={(v) => `${v.toFixed(1)}점`}
-      caption="적합도 점수에 대한 기여 (점)"
+      caption="항목별로 적합도에 보탠 점수"
       max={Math.max(...Object.values(weights).map((w) => w * 100))}
     />
   );
@@ -60,8 +60,8 @@ function Briefs({ detail }: { detail: Schemas["OpportunityDetail"] }) {
   return (
     <Card>
       <CardHeader
-        title="Deep Brief"
-        description="신호·원문 인용·기관 발주 이력으로 쓴 1쪽 영업 브리핑 (3 크레딧)"
+        title="영업 브리핑"
+        description="지금까지 잡힌 신호와 원문, 이 기관의 발주 이력을 모아 한 장짜리 브리핑을 써 드려요. 한 번에 3크레딧이 들어요."
         action={
           <Button
             size="sm"
@@ -69,21 +69,24 @@ function Briefs({ detail }: { detail: Schemas["OpportunityDetail"] }) {
             disabled={balance < 3}
             onClick={() =>
               create.mutate(undefined, {
-                onSuccess: () => toast("good", "브리프를 생성했습니다 (3 크레딧 사용)"),
+                onSuccess: () => toast("good", "브리핑을 만들었어요. 크레딧 3개를 썼어요."),
                 onError: (e) =>
-                  toast("critical", e instanceof ApiError && e.status === 402 ? e.message : "브리프 생성에 실패했습니다"),
+                  toast(
+                    "critical",
+                    e instanceof ApiError && e.status === 402 ? e.message : "브리핑을 만들지 못했어요. 잠시 후 다시 해 주세요.",
+                  ),
               })
             }
           >
             <FileSearch className="size-4" aria-hidden />
-            {latest ? "다시 생성" : "생성하기"}
+            {latest ? "다시 만들기" : "브리핑 만들기"}
           </Button>
         }
       />
       <div className="px-5 pt-3 pb-5">
         {balance < 3 ? (
           <p className="mb-3 text-[13px] text-muted">
-            크레딧이 부족합니다.{" "}
+            크레딧이 모자라요.{" "}
             <Link href="/app/billing" className="text-accent-text hover:underline">
               충전하기
             </Link>
@@ -93,11 +96,12 @@ function Briefs({ detail }: { detail: Schemas["OpportunityDetail"] }) {
           <article className="prose-brief">
             <ReactMarkdown>{latest.content_md}</ReactMarkdown>
             <p className="mt-4 text-[11px] text-muted">
-              {formatDateTime(latest.created_at)} · {latest.model}
+              {formatDateTime(latest.created_at)} ·{" "}
+              {latest.model.startsWith("heuristic") ? "LLM 없이 템플릿으로 작성" : latest.model}
             </p>
           </article>
         ) : (
-          <p className="text-[13px] text-muted">아직 생성된 브리프가 없습니다.</p>
+          <p className="text-[13px] text-muted">아직 만든 브리핑이 없어요.</p>
         )}
       </div>
     </Card>
@@ -107,9 +111,9 @@ function Briefs({ detail }: { detail: Schemas["OpportunityDetail"] }) {
 function FeedbackBar({ id, current }: { id: number; current: string | null }) {
   const feedback = useFeedback(id);
   const options = [
-    { key: "relevant", label: "관련 있음", icon: ThumbsUp },
-    { key: "irrelevant", label: "관련 없음", icon: ThumbsDown },
-    { key: "won", label: "수주함", icon: Trophy },
+    { key: "relevant", label: "관련 있어요", icon: ThumbsUp },
+    { key: "irrelevant", label: "관련 없어요", icon: ThumbsDown },
+    { key: "won", label: "수주했어요", icon: Trophy },
     { key: "dismissed", label: "숨기기", icon: EyeOff },
   ] as const;
   return (
@@ -136,7 +140,7 @@ export default function OpportunityPage() {
   const { data, error, isLoading } = useOpportunity(id);
 
   if (isLoading) return <Skeleton className="h-96 w-full" />;
-  if (error || !data) return <ErrorNote error={error ?? new Error("기회를 찾을 수 없습니다")} />;
+  if (error || !data) return <ErrorNote error={error ?? new Error("이 사업을 찾을 수 없어요")} />;
 
   const lead = leadLabel(data.lead_days);
   const reached = data.signals.map((s) => s.stage);
@@ -164,9 +168,9 @@ export default function OpportunityPage() {
       <HeadStart detail={data} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="추정 예산" value={formatKRW(data.est_budget_krw)} sub="가장 최근 단계 기준" />
+        <StatTile label="추정 예산" value={formatKRW(data.est_budget_krw)} sub="가장 진행된 단계의 문서 기준" />
         {data.bid_published_at ? (
-          <StatTile label="입찰공고" value={formatDate(data.bid_published_at)} sub="나라장터에 게시된 날" />
+          <StatTile label="입찰공고" value={formatDate(data.bid_published_at)} sub="나라장터에 올라온 날" />
         ) : (
           <StatTile
             label="입찰 예상 시기"
@@ -174,7 +178,7 @@ export default function OpportunityPage() {
             sub={lead ? `입찰 ${lead}` : undefined}
           />
         )}
-        <StatTile label="공고 전환 확률" value={formatPercent(data.conversion_prob)} sub="백테스트로 보정" />
+        <StatTile label="공고로 이어질 확률" value={formatPercent(data.conversion_prob)} sub="지난 데이터로 보정" />
         <StatTile label="우리 회사 적합도" value={data.score !== null ? `${Math.round(data.score * 100)}점` : "–"} sub={`신호 ${data.signal_count}건`} />
       </div>
 
@@ -186,7 +190,7 @@ export default function OpportunityPage() {
         <Card>
           <CardHeader
             title="신호 타임라인"
-            description="문서마다 근거 문장을 원문 위치 그대로 강조했습니다. 근거를 찾지 못한 추출은 보여주지 않습니다."
+            description="문서마다 근거가 된 문장을 원문 그대로 형광펜으로 칠해 뒀어요. 원문에서 근거를 못 찾은 내용은 아예 보여주지 않아요."
           />
           <div className="px-5 pt-5 pb-6">
             <SignalTimeline signals={data.signals} />
@@ -195,7 +199,7 @@ export default function OpportunityPage() {
 
         <div className="space-y-6">
           <Card>
-            <CardHeader title="왜 추천되었나" />
+            <CardHeader title="추천한 이유" />
             <div className="px-5 pt-3 pb-5">
               <Why breakdown={data.breakdown} />
             </div>
@@ -210,9 +214,9 @@ export default function OpportunityPage() {
           ) : null}
           <Briefs detail={data} />
           <Card className="p-5">
-            <p className="mb-3 text-[13px] font-medium text-ink">이 추천이 도움이 되었나요?</p>
+            <p className="mb-3 text-[13px] font-medium text-ink">이 추천, 도움이 됐나요?</p>
             <FeedbackBar id={data.id} current={data.feedback} />
-            <p className="mt-2 text-[12px] text-muted">피드백은 랭킹 모델 학습 데이터로 쓰입니다.</p>
+            <p className="mt-2 text-[12px] text-muted">‘관련 없어요’나 ‘숨기기’를 누르면 피드와 알림에서 빠져요. 남겨 주신 의견은 추천 모델을 학습시킬 때도 써요.</p>
           </Card>
         </div>
       </div>

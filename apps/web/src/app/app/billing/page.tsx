@@ -15,16 +15,16 @@ type Billing = Schemas["BillingOut"];
 const REASON_LABEL: Record<string, string> = {
   plan_grant: "플랜 기본 제공",
   purchase: "크레딧 구매",
-  brief: "Deep Brief 생성",
+  brief: "영업 브리핑",
   refund: "환불",
   adjustment: "조정",
-  expiry: "기간 만료 소멸",
+  expiry: "기간이 지나 소멸",
 };
 const CHANNEL_LABEL: Record<string, string> = { email: "이메일", slack: "Slack", kakao: "카카오 알림톡" };
 const STATUS_LABEL: Record<string, string> = {
   active: "이용 중",
   trialing: "체험 중",
-  past_due: "결제 실패 — 재시도 예정",
+  past_due: "결제 실패 · 다시 시도할 예정",
   canceled: "해지됨",
 };
 
@@ -50,10 +50,10 @@ async function loadTossSdk(): Promise<NonNullable<Window["TossPayments"]>> {
     const script = document.createElement("script");
     script.src = "https://js.tosspayments.com/v2/standard";
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("토스페이먼츠 SDK를 불러오지 못했습니다"));
+    script.onerror = () => reject(new Error("토스페이먼츠 결제창을 불러오지 못했어요"));
     document.head.appendChild(script);
   });
-  if (!window.TossPayments) throw new Error("토스페이먼츠 SDK를 불러오지 못했습니다");
+  if (!window.TossPayments) throw new Error("토스페이먼츠 결제창을 불러오지 못했어요");
   return window.TossPayments;
 }
 
@@ -78,7 +78,7 @@ function CardSection({ billing }: { billing: Billing }) {
     // Local/demo: the fake provider issues a test billing key.
     register.mutate(
       { auth_key: newIdempotencyKey("demo"), customer_key: billing.customer_key },
-      { onSuccess: () => toast("good", "테스트 카드를 등록했습니다") },
+      { onSuccess: () => toast("good", "테스트 카드를 등록했어요") },
     );
   };
 
@@ -88,14 +88,14 @@ function CardSection({ billing }: { billing: Billing }) {
         title="결제 수단"
         description={
           billing.payment_provider === "toss"
-            ? "토스페이먼츠 자동결제(빌링)로 매월 결제됩니다. 카드 정보는 저장하지 않고 암호화된 빌링키만 보관합니다."
-            : "데모 환경입니다. 실제 결제 없이 테스트 결제사로 동작합니다."
+            ? "매달 토스페이먼츠 자동결제로 결제돼요. 카드 번호는 저장하지 않고, 암호화한 빌링키만 보관해요."
+            : "데모라서 실제로 돈이 나가지 않아요. 테스트용 결제사가 결제하는 흉내만 내요."
         }
       />
       <div className="flex flex-wrap items-center justify-between gap-3 p-5">
         <div className="flex items-center gap-2 text-sm text-ink">
           <CreditCard className="size-4 text-muted" aria-hidden />
-          {sub.card_summary ?? "등록된 카드가 없습니다"}
+          {sub.card_summary ?? "등록된 카드가 없어요"}
         </div>
         <Button variant="secondary" size="sm" loading={register.isPending} onClick={() => void startRegistration()}>
           {sub.card_summary ? "카드 변경" : "카드 등록"}
@@ -128,7 +128,7 @@ function Plans({ billing }: { billing: Billing }) {
               <li className="flex gap-2"><Check className="mt-0.5 size-3.5 text-good" aria-hidden />매월 크레딧 {plan.monthly_credits}개</li>
               <li className="flex gap-2"><Check className="mt-0.5 size-3.5 text-good" aria-hidden />관심 지역 {plan.max_regions ?? "무제한"}{plan.max_regions ? "개" : ""}</li>
               <li className="flex gap-2"><Check className="mt-0.5 size-3.5 text-good" aria-hidden />{plan.channels.map((c) => CHANNEL_LABEL[c] ?? c).join(" · ")}</li>
-              <li className="flex gap-2"><Check className="mt-0.5 size-3.5 text-good" aria-hidden />{plan.instant_alerts ? "즉시 알림" : "매일·매주 요약 알림"}</li>
+              <li className="flex gap-2"><Check className="mt-0.5 size-3.5 text-good" aria-hidden />{plan.instant_alerts ? "새 사업 바로 알림" : "매일·매주 요약 알림"}</li>
             </ul>
             <Button
               className="mt-5"
@@ -138,12 +138,12 @@ function Plans({ billing }: { billing: Billing }) {
               onClick={() =>
                 change.mutate(plan.key as Schemas["PlanChangeIn"]["plan"], {
                   onSuccess: () =>
-                    toast("good", plan.monthly_price_krw ? `${plan.name} 플랜으로 변경했습니다` : "현재 기간이 끝나면 Free로 전환됩니다"),
-                  onError: (e) => toast("critical", e instanceof ApiError ? e.message : "플랜 변경에 실패했습니다"),
+                    toast("good", plan.monthly_price_krw ? `${plan.name} 플랜으로 바꿨어요` : "이번 결제 기간이 끝나면 Free로 바뀌어요"),
+                  onError: (e) => toast("critical", e instanceof ApiError ? e.message : "플랜을 바꾸지 못했어요"),
                 })
               }
             >
-              {isCurrent ? "이용 중" : plan.monthly_price_krw ? "이 플랜으로 변경" : "해지 예약"}
+              {isCurrent ? "이용 중" : plan.monthly_price_krw ? "이 플랜으로 바꾸기" : "해지 예약"}
             </Button>
           </Card>
         );
@@ -159,7 +159,7 @@ function Credits({ billing }: { billing: Billing }) {
     <Card>
       <CardHeader
         title={`크레딧 ${billing.credit_balance}개`}
-        description={`Deep Brief 1건에 ${billing.brief_cost}크레딧. 플랜 제공분은 매월 소멸하고, 구매한 크레딧은 소멸하지 않습니다.`}
+        description={`영업 브리핑 한 건에 ${billing.brief_cost}크레딧이 들어요. 플랜으로 받은 크레딧은 결제 주기가 끝나면 사라지고, 따로 산 크레딧은 계속 남아요.`}
         action={
           <div className="flex gap-2">
             {billing.credit_packs.map((p) => (
@@ -170,8 +170,8 @@ function Credits({ billing }: { billing: Billing }) {
                 loading={buy.isPending && buy.variables === p.key}
                 onClick={() =>
                   buy.mutate(p.key, {
-                    onSuccess: () => toast("good", `크레딧 ${p.credits}개를 충전했습니다`),
-                    onError: (e) => toast("critical", e instanceof ApiError ? e.message : "결제에 실패했습니다"),
+                    onSuccess: () => toast("good", `크레딧 ${p.credits}개를 충전했어요`),
+                    onError: (e) => toast("critical", e instanceof ApiError ? e.message : "결제하지 못했어요"),
                   })
                 }
               >
@@ -229,7 +229,8 @@ export default function BillingPage() {
       />
       {sub.status === "past_due" ? (
         <div role="alert" className="rounded-lg border border-serious/40 bg-serious/10 px-4 py-3 text-sm text-ink">
-          최근 정기결제가 실패했습니다({sub.failed_attempts}회). 1·3·7일 뒤 다시 시도하며, 모두 실패하면 Free 플랜으로 전환됩니다.
+          정기결제가 {sub.failed_attempts}번 실패했어요. 1일, 3일, 7일 뒤에 다시 시도하고, 그래도 안 되면 Free 플랜으로 바뀌어요. 카드를
+          한 번 확인해 주세요.
         </div>
       ) : null}
       <CardSection billing={b} />

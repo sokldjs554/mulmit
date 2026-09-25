@@ -37,7 +37,7 @@ function LoginForm() {
     <Card className="w-full max-w-sm p-6">
       <Logo />
       <h1 className="mt-6 text-xl font-bold text-ink">로그인</h1>
-      <p className="mt-1 text-sm text-muted">입찰공고보다 먼저, 공공 수요를 확인하세요.</p>
+      <p className="mt-1 text-sm text-muted">공고가 나오기 전에 잡힌 사업들이 기다리고 있어요.</p>
       <form className="mt-6 space-y-4" onSubmit={onSubmit}>
         <Field label="이메일" htmlFor="email">
           <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
@@ -58,7 +58,7 @@ function LoginForm() {
         </Button>
       </form>
       <div className="mt-5 space-y-2 border-t border-line pt-5">
-        <p className="text-[12px] text-muted">심사용 데모 계정 (합성 데이터)</p>
+        <p className="text-[12px] text-muted">가입 없이 바로 둘러볼 수 있어요 · 가상 데이터</p>
         <div className="grid grid-cols-2 gap-2">
           <Button variant="secondary" size="sm" onClick={() => submit(DEMO)} disabled={login.isPending}>
             고객사로 둘러보기
@@ -69,7 +69,7 @@ function LoginForm() {
         </div>
       </div>
       <p className="mt-5 text-center text-[13px] text-muted">
-        계정이 없나요?{" "}
+        아직 계정이 없으세요?{" "}
         <Link href="/signup" className="font-medium text-accent-text hover:underline">
           무료로 시작하기
         </Link>

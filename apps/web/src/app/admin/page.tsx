@@ -35,16 +35,16 @@ export default function AdminOverview() {
   ];
   return (
     <div className="space-y-6">
-      <PageHeader title="운영 개요" description="파이프라인이 건강한지, 문제가 있다면 어디서 막혔는지 한 화면에서 봅니다." />
+      <PageHeader title="운영 개요" description="파이프라인이 잘 돌고 있는지, 막혔다면 어디서 막혔는지 여기서 한눈에 봐요." />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="검토 대기" value={`${f.review_open}건`} sub="근거·금액·기관 검증 실패" />
+        <StatTile label="검토 대기" value={`${f.review_open}건`} sub="근거·금액·기관을 확인 못 한 신호" />
         <StatTile label="실패한 작업 (24시간)" value={`${data.failed_jobs}건`} sub={`대기열 ${data.queue_depth ?? "–"}건`} />
         <StatTile
           label="오늘 LLM 비용"
           value={formatUSD(data.llm_spent_today_usd)}
           sub={`일 한도 ${formatUSD(data.llm_daily_budget_usd)}의 ${Math.round(budgetUse * 100)}%`}
         />
-        <StatTile label="이상 수집원" value={`${data.sources_unhealthy}곳`} sub="연속 실패 1회 이상" />
+        <StatTile label="문제 있는 수집원" value={`${data.sources_unhealthy}곳`} sub="최근 실행이 실패한 곳" />
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -70,7 +70,7 @@ export default function AdminOverview() {
               <Link href="/admin/review" className="text-accent-text hover:underline">
                 여기
               </Link>
-              에서 처리합니다. 승인하면 기회 연결을 다시 실행합니다.
+              서 처리해요. 승인하면 사업 연결을 다시 돌려요.
             </p>
           </div>
         </Card>
@@ -82,7 +82,7 @@ export default function AdminOverview() {
                 { key: "open", label: "공고 전 (진행 중)", value: f.opportunities.open ?? 0 },
                 { key: "bid_open", label: "입찰 진행", value: f.opportunities.bid_open ?? 0 },
                 { key: "closed", label: "종료", value: f.opportunities.closed ?? 0 },
-                { key: "dormant", label: "휴면 (18개월 무신호)", value: f.opportunities.dormant ?? 0 },
+                { key: "dormant", label: "휴면 (18개월째 소식 없음)", value: f.opportunities.dormant ?? 0 },
               ]}
               format={(v) => v.toLocaleString("ko-KR")}
               caption="기회 수"
@@ -99,7 +99,7 @@ export default function AdminOverview() {
                 caption="상태별 작업 수"
               />
             ) : (
-              <p className="text-sm text-muted">최근 24시간 동안 워커가 실행한 작업이 없습니다.</p>
+              <p className="text-sm text-muted">최근 24시간 동안 워커가 돌린 작업이 없어요.</p>
             )}
           </div>
         </Card>

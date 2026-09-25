@@ -17,7 +17,7 @@ export default function SourcesPage() {
     <div className="space-y-6">
       <PageHeader
         title="수집원"
-        description="공공 API는 일일 호출 한도(CLIK·data.go.kr 1,000회)와 HTTP 200 오류 응답이 흔합니다. 한도 초과 시 자정(KST) 이후로 재예약하고, 연속 실패하면 서킷을 엽니다."
+        description="공공 API는 하루 호출 한도(CLIK·data.go.kr 1,000회)가 있고, 오류를 HTTP 200으로 돌려주는 일도 잦아요. 한도를 넘기면 자정(한국 시간) 뒤로 다시 예약하고, 계속 실패하면 서킷을 열어 잠시 쉬어요."
       />
       {sources.error ? <ErrorNote error={sources.error} /> : null}
       <Card className="overflow-x-auto">
@@ -83,7 +83,7 @@ export default function SourcesPage() {
                       variant="secondary"
                       disabled={!s.enabled}
                       loading={run.isPending && run.variables === s.key}
-                      onClick={() => run.mutate(s.key, { onSuccess: () => toast("good", `${s.key} 수집을 예약했습니다`) })}
+                      onClick={() => run.mutate(s.key, { onSuccess: () => toast("good", `${s.key} 수집을 예약했어요`) })}
                     >
                       <Play className="size-3.5" aria-hidden /> 지금 수집
                     </Button>

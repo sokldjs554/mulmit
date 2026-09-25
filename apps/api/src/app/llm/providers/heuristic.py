@@ -23,7 +23,7 @@ from app.domain.taxonomy import (
     commitment_level,
 )
 from app.domain.timing import resolve_timing
-from app.llm.prompts import EXTRACT_PROMPT_VERSION, ChunkContext
+from app.llm.prompts import EXTRACT_PROMPT_VERSION, BriefFacts, ChunkContext
 from app.llm.schemas import Commitment, ExtractedSignal, ExtractionOutput
 from app.llm.types import LLMResult
 
@@ -299,12 +299,12 @@ class HeuristicProvider:
             prompt_version=EXTRACT_PROMPT_VERSION,
         )
 
-    async def brief(self, facts: str) -> LLMResult[str]:
+    async def brief(self, facts: BriefFacts) -> LLMResult[str]:
         from app.pipeline.brief import template_brief
 
         return LLMResult(
             value=template_brief(facts),
             provider=self.name,
             model=HEURISTIC_VERSION,
-            prompt_version="template-v1",
+            prompt_version="template-v2",
         )

@@ -58,14 +58,16 @@ async def current_principal(
     if not token and auth.lower().startswith("bearer "):
         token = auth[7:]
     if not token:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "로그인이 필요합니다")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "로그인이 필요해요")
     try:
         claims = decode_token(settings, token)
     except jwt.PyJWTError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "세션이 만료되었습니다") from exc
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "로그인이 만료됐어요. 다시 로그인해 주세요"
+        ) from exc
     user = await session.get(User, int(claims["sub"]))
     if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "사용자를 찾을 수 없습니다")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "계정을 찾을 수 없어요")
     org = await session.get(Organization, user.org_id)
     assert org is not None
     return Principal(user, org)
@@ -76,7 +78,7 @@ PrincipalDep = Annotated[Principal, Depends(current_principal)]
 
 async def staff_principal(principal: PrincipalDep) -> Principal:
     if not principal.user.is_staff:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "운영자 권한이 필요합니다")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "운영자만 볼 수 있는 화면이에요")
     return principal
 
 

@@ -27,10 +27,10 @@ function detailMessage(error: unknown): string {
     if (typeof detail === "string") return detail;
     if (Array.isArray(detail) && detail.length > 0) {
       const first = detail[0] as { msg?: string };
-      return first.msg ?? "입력값을 확인해 주세요";
+      return first.msg ?? "입력한 내용을 다시 확인해 주세요";
     }
   }
-  return "요청을 처리하지 못했습니다";
+  return "요청을 처리하지 못했어요";
 }
 
 /** Unwrap an openapi-fetch result: return data or throw a typed ApiError. */

@@ -57,7 +57,7 @@ function Backtest({ run }: { run: Run }) {
           data={data}
           format={(v) => formatPercent(v)}
           max={1}
-          caption="첫 신호 유형별 입찰 전환율 — 랭킹의 '공고 전환 가능성'을 이 값으로 보정합니다"
+          caption="첫 신호 종류별로 실제 입찰까지 간 비율이에요. 랭킹의 '공고로 이어질 가능성'을 이 값으로 맞춰요"
         />
       </div>
     </Card>
@@ -84,8 +84,8 @@ function Extraction({ run }: { run: Run }) {
         <BarList data={data} format={(v) => formatPercent(v, 1)} max={1} caption="비율" />
         {synthetic && triage.chunks ? (
           <p className="text-[13px] text-ink-2">
-            트리아지: 청크 {String(triage.chunks)}개 중 {formatPercent(num(triage.skipped_rate))}를 LLM 호출 없이 건너뛰었고, 그 상태에서 정답 신호
-            재현율은 {formatPercent(num(triage.gold_recall_after_triage), 1)}입니다.
+            트리아지로 청크 {String(triage.chunks)}개 중 {formatPercent(num(triage.skipped_rate))}는 LLM을 부르지 않고 건너뛰었어요. 그렇게
+            건너뛰고도 정답 신호는 {formatPercent(num(triage.gold_recall_after_triage), 1)}를 찾았어요.
           </p>
         ) : null}
       </div>
@@ -139,17 +139,17 @@ export default function EvalsPage() {
   const ocr = latest("ocr");
   return (
     <div className="space-y-6">
-      <PageHeader title="평가·백테스트" description="프롬프트·파서·랭커를 바꾸기 전과 후를 같은 정답으로 비교합니다 (manage eval all --record)." />
+      <PageHeader title="평가·백테스트" description="프롬프트, 파서, 랭커를 바꾸기 전과 후를 같은 정답으로 비교해요 (manage eval all --record)." />
       <div className="flex items-start gap-2 rounded-lg border border-line bg-surface px-4 py-3 text-[13px] text-ink-2">
         <Info className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
-        합성 세계(synthetic world)의 수치는 파이프라인이 설계대로 동작하는지 보여줄 뿐 실제 데이터의 정확도가 아닙니다. 생성기와 다른 문장으로 쓴
-        수기 작성 세트를 따로 둔 이유입니다.
+        합성 데이터로 잰 수치는 파이프라인이 설계대로 도는지 보여줄 뿐, 실제 데이터에서의 정확도는 아니에요. 그래서 생성기와 다른 문장으로
+        직접 쓴 평가 세트를 따로 뒀어요.
       </div>
       {evals.error ? <ErrorNote error={evals.error} /> : null}
       {evals.isLoading ? <Skeleton className="h-96" /> : null}
       {!evals.isLoading && runs.length === 0 ? (
         <Card>
-          <EmptyState title="아직 평가 기록이 없습니다" description="manage eval all --record 를 실행하세요." />
+          <EmptyState title="아직 평가 기록이 없어요" description="manage eval all --record를 실행하면 여기에 쌓여요." />
         </Card>
       ) : null}
       {backtest ? <Backtest run={backtest} /> : null}

@@ -19,7 +19,7 @@ from app.pipeline.triage import triage_chunk
 
 PAYLOAD = {
     "org_name": "데모",
-    "headline": "새로 포착된 공공 수요 1건",
+    "headline": "9월 25일, 새로 찾은 사업 1건",
     "settings_url": "https://app.example/app/alerts",
     "items": [
         {
@@ -29,7 +29,7 @@ PAYLOAD = {
             "stage": "budget_line",
             "stage_label": "예산 편성",
             "budget": "3억 5,000만원",
-            "window": "2026.07~2026.12",
+            "when": "입찰 예상 2026년 7~12월",
             "score_pct": 82,
             "evidence": "<b>반영</b>하겠습니다",
             "url": "https://app.example/app/opportunities/1",
@@ -123,6 +123,60 @@ def test_email_render_escapes_html_and_has_text_part() -> None:
     assert "&lt;b&gt;반영&lt;/b&gt;" in email.html
     assert "<b>반영</b>" in email.text  # plain text is not HTML-escaped
     assert email.subject.startswith("[발주 예측]")
+    assert "3억 5,000만원 · 입찰 예상 2026년 7~12월 · 적합도 82점" in email.text
+
+
+def test_digests_queued_before_the_when_field_still_render() -> None:
+    item = {k: v for k, v in PAYLOAD["items"][0].items() if k != "when"}  # type: ignore[union-attr]
+    legacy = {**PAYLOAD, "items": [{**item, "window": "2026.07~2026.12"}]}
+    assert "입찰 예상 2026.07~2026.12" in render_email(legacy).text
+    assert "입찰 예상 2026.07~2026.12" in render_slack(legacy)["blocks"][1]["text"]["text"]
+
+
+def test_old_window_labels_are_reworded_not_prefixed() -> None:
+    from app.notify.render import when
+
+    assert when({"window": "공고됨(2026.06.01)"}) == "2026.06.01 입찰공고"
+    assert when({"window": "미정"}) == "입찰 시기 미정"
+    assert when({"window": "2026.07~2026.12"}) == "입찰 예상 2026.07~2026.12"
+
+
+def test_every_channel_counts_the_whole_digest() -> None:
+    items = [{**PAYLOAD["items"][0], "opportunity_id": i} for i in range(12)]  # type: ignore[dict-item]
+    digest = {**PAYLOAD, "items": items, "more": 5, "feed_url": "https://app.example/app"}
+    texts = [b["text"]["text"] for b in render_slack(digest)["blocks"] if b["type"] == "section"]
+    assert texts[-1] == "<https://app.example/app|나머지 7건도 보기>"  # 2 cut by Slack + 5 left out
+    assert render_kakao_variables(digest)["#{건수}"] == "17"
+
+
+def test_test_notifications_say_what_they_are() -> None:
+    note = {**PAYLOAD, "headline": "테스트 알림이에요", "items": []}
+    assert "설정은 끝났어요" in render_email(note).text
+    assert "설정은 끝났어요" in render_slack(note)["blocks"][1]["text"]["text"]
+
+
+def test_alert_timing_reads_as_a_date_or_a_forecast() -> None:
+    from app.notify.dispatch import _when_label
+
+    def opp(**kw: object) -> Opportunity:
+        return Opportunity(
+            **{"bid_published_at": None, "bid_window_start": None, "bid_window_end": None, **kw}
+        )
+
+    assert _when_label(opp(bid_published_at=date(2026, 6, 1))) == "2026.06.01 입찰공고"
+    assert (
+        _when_label(opp(bid_window_start=date(2026, 7, 1), bid_window_end=date(2026, 12, 31)))
+        == "입찰 예상 2026년 7~12월"
+    )
+    assert (
+        _when_label(opp(bid_window_start=date(2026, 11, 1), bid_window_end=date(2027, 2, 28)))
+        == "입찰 예상 2026년 11월~2027년 2월"
+    )
+    assert (
+        _when_label(opp(bid_window_start=date(2026, 7, 1), bid_window_end=date(2026, 7, 31)))
+        == "입찰 예상 2026년 7월"
+    )
+    assert _when_label(opp()) == "입찰 시기 미정"
 
 
 def test_slack_and_kakao_render() -> None:

@@ -44,7 +44,10 @@ async def _check_throttle(request: Request, runtime: RuntimeDep, email: str) -> 
         return
     failures = await runtime.redis.get(_throttle_key(request, email))
     if failures is not None and int(failures) >= 5:
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "잠시 후 다시 시도해 주세요")
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "로그인 시도가 너무 많았어요. 1분 뒤에 다시 해 주세요",
+        )
 
 
 async def _record_failure(request: Request, runtime: RuntimeDep, email: str) -> None:
@@ -64,7 +67,7 @@ async def signup(
     runtime: RuntimeDep,
 ) -> MeOut:
     if await session.scalar(select(User.id).where(User.email == body.email)):
-        raise HTTPException(status.HTTP_409_CONFLICT, "이미 가입된 이메일입니다")
+        raise HTTPException(status.HTTP_409_CONFLICT, "이미 가입한 이메일이에요. 로그인해 주세요")
     org = Organization(name=body.company_name, plan="free", credit_balance=0)
     session.add(org)
     await session.flush()
@@ -102,9 +105,7 @@ async def login(
     user = await session.scalar(select(User).where(User.email == email))
     if user is None or not verify_password(user.password_hash, body.password):
         await _record_failure(request, runtime, email)
-        raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다"
-        )
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "이메일이나 비밀번호가 맞지 않아요")
     if runtime.redis is not None:
         await runtime.redis.delete(_throttle_key(request, email))
     user.last_login_at = datetime.now(UTC)

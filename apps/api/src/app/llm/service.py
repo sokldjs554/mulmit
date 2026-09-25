@@ -20,6 +20,7 @@ from app.llm.budget import SpendGuard
 from app.llm.prompts import (
     EXTRACT_PROMPT_VERSION,
     EXTRACT_SYSTEM,
+    BriefFacts,
     ChunkContext,
     extract_user_message,
 )
@@ -46,7 +47,7 @@ class Provider(Protocol):
     brief_model: str
 
     async def extract(self, ctx: ChunkContext) -> LLMResult[ExtractionOutput]: ...
-    async def brief(self, facts: str) -> LLMResult[str]: ...
+    async def brief(self, facts: BriefFacts) -> LLMResult[str]: ...
 
 
 @dataclass(slots=True)
@@ -252,7 +253,7 @@ class LLMService:
         return ExtractionAttempt(result.value, extractor_id, degraded=False)
 
     async def brief(
-        self, session: AsyncSession, facts: str, *, document_id: int | None = None
+        self, session: AsyncSession, facts: BriefFacts, *, document_id: int | None = None
     ) -> tuple[str, str]:
         """Returns (markdown, model). Falls back to the template brief on any LLM failure."""
         if self.primary is not None:

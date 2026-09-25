@@ -1,7 +1,7 @@
 """Plans and credit prices.
 
 Subscription buys *coverage* (how many watch regions, which alert channels) and a monthly
-credit grant; credits pay for the expensive, per-use LLM work (Deep Brief). Credits granted by a
+credit grant; credits pay for the expensive, per-use LLM work (the 영업 브리핑). Credits granted by a
 plan expire at the end of the period; purchased credits do not — the ledger keeps them apart via
 ``reason``.
 """

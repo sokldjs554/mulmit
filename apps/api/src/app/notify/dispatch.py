@@ -36,6 +36,7 @@ from app.db.models import (
 )
 from app.domain.krw import format_krw
 from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage
+from app.domain.timing import month_span
 from app.log import get_logger
 from app.notify.channels import Channel, PermanentDeliveryError, TransientDeliveryError
 
@@ -43,7 +44,18 @@ log = get_logger(__name__)
 MAX_ATTEMPTS = 5
 
 
-def _window_label(opp: Opportunity) -> str:
+def _when_label(opp: Opportunity) -> str:
+    """The timing half of an alert line: when the tender came out, or when we expect it."""
+    if opp.bid_published_at:
+        return f"{opp.bid_published_at:%Y.%m.%d} 입찰공고"
+    if opp.bid_window_start is None:
+        return "입찰 시기 미정"
+    return f"입찰 예상 {month_span(opp.bid_window_start, opp.bid_window_end)}"
+
+
+def _legacy_window(opp: Opportunity) -> str:
+    # Still written next to "when" so a rolled-back worker, which reads item["window"],
+    # can render digests queued by this version. Drop once no such rollback is possible.
     if opp.bid_published_at:
         return f"공고됨({opp.bid_published_at:%Y.%m.%d})"
     if opp.bid_window_start and opp.bid_window_end:
@@ -51,21 +63,29 @@ def _window_label(opp: Opportunity) -> str:
     return "미정"
 
 
-async def _best_quote(session: AsyncSession, opp_id: int) -> str | None:
+async def _best_evidence(session: AsyncSession, opp_id: int) -> tuple[str | None, str | None]:
+    """(quote, note) from the latest early signal. A council answer is quoted; a budget-book
+    row ("세부사업: …  197,000  0  197,000") means nothing out of its table, so it becomes a
+    sentence instead."""
     rows = (
         await session.scalars(
             select(Signal)
             .join(OpportunitySignal, OpportunitySignal.signal_id == Signal.id)
             .where(OpportunitySignal.opportunity_id == opp_id)
+            .where(Signal.stage.in_(("council_mention", "budget_line")))
             .order_by(Signal.observed_at.desc())
         )
     ).all()
     for s in rows:
+        if s.stage == "budget_line":
+            if s.budget_krw:
+                return None, f"예산서에 {format_krw(s.budget_krw)}이 편성돼 있어요."
+            continue
         for ev in s.evidence:
-            if ev.get("found") and s.stage in ("council_mention", "budget_line"):
-                quote = str(ev.get("quote", ""))
-                return quote[:140] + ("…" if len(quote) > 140 else "")
-    return None
+            if ev.get("found"):
+                quote = " ".join(str(ev.get("quote", "")).split())
+                return quote[:140] + ("…" if len(quote) > 140 else ""), None
+    return None, None
 
 
 async def build_items(
@@ -74,6 +94,7 @@ async def build_items(
     names = dict((await session.execute(select(InstitutionRow.code, InstitutionRow.name))).all())
     items = []
     for rec, opp in recs:
+        quote, note = await _best_evidence(session, opp.id)
         items.append(
             {
                 "opportunity_id": opp.id,
@@ -82,9 +103,11 @@ async def build_items(
                 "stage": opp.stage,
                 "stage_label": STAGE_LABEL[Stage(opp.stage)],
                 "budget": format_krw(opp.est_budget_krw) if opp.est_budget_krw else None,
-                "window": _window_label(opp),
+                "when": _when_label(opp),
+                "window": _legacy_window(opp),
                 "score_pct": round(rec.score * 100),
-                "evidence": await _best_quote(session, opp.id),
+                "evidence": quote,
+                "evidence_note": note,
                 "url": f"{web_url}/app/opportunities/{opp.id}",
             }
         )
@@ -152,10 +175,11 @@ async def enqueue_alerts(
     more = 0 if rule.mode == "instant" else max(len(fresh) - 15, 0)
     for batch in batches:
         items = await build_items(session, batch, web_url)
+        local = now.astimezone(KST)
         headline = (
             f"{items[0]['institution']} · {items[0]['title']}"
             if rule.mode == "instant"
-            else f"{now.astimezone(KST):%m월 %d일} 새로 포착된 공공 수요 {len(items)}건"
+            else f"{local.month}월 {local.day}일, 새로 찾은 사업 {len(items) + more}건"
         )
         payload = {
             "org_name": org.name,

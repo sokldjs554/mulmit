@@ -31,6 +31,7 @@ from app.llm.prompts import (
     BRIEF_SYSTEM,
     EXTRACT_PROMPT_VERSION,
     EXTRACT_SYSTEM,
+    BriefFacts,
     ChunkContext,
     extract_user_message,
 )
@@ -161,14 +162,14 @@ class AnthropicProvider:
             request_id=getattr(resp, "_request_id", None),
         )
 
-    async def brief(self, facts: str) -> LLMResult[str]:
+    async def brief(self, facts: BriefFacts) -> LLMResult[str]:
         config = _output_config(self._brief_effort, None)
         started = time.perf_counter()
         resp = await self._create(
             model=self.brief_model,
             max_tokens=6000,
             system=self._system(BRIEF_SYSTEM),
-            messages=[{"role": "user", "content": facts}],
+            messages=[{"role": "user", "content": facts.as_prompt()}],
             **({"output_config": config} if config else {}),
         )
         latency = int((time.perf_counter() - started) * 1000)
