@@ -36,7 +36,7 @@ from app.db.models import (
 )
 from app.domain.krw import format_krw
 from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage
-from app.domain.timing import month_span
+from app.domain.timing import month_span, remaining_window
 from app.log import get_logger
 from app.notify.channels import Channel, PermanentDeliveryError, TransientDeliveryError
 
@@ -44,13 +44,16 @@ log = get_logger(__name__)
 MAX_ATTEMPTS = 5
 
 
-def _when_label(opp: Opportunity) -> str:
+def _when_label(opp: Opportunity, today: date) -> str:
     """The timing half of an alert line: when the tender came out, or when we expect it."""
     if opp.bid_published_at:
         return f"{opp.bid_published_at:%Y.%m.%d} 입찰공고"
-    if opp.bid_window_start is None:
+    start, end, passed = remaining_window(opp.bid_window_start, opp.bid_window_end, today)
+    if start is None:
         return "입찰 시기 미정"
-    return f"입찰 예상 {month_span(opp.bid_window_start, opp.bid_window_end)}"
+    if passed:
+        return f"예상 시기({month_span(start, end)}) 지남, 아직 공고 전"
+    return f"입찰 예상 {month_span(start, end)}"
 
 
 def _legacy_window(opp: Opportunity) -> str:
@@ -89,10 +92,15 @@ async def _best_evidence(session: AsyncSession, opp_id: int) -> tuple[str | None
 
 
 async def build_items(
-    session: AsyncSession, recs: list[tuple[Recommendation, Opportunity]], web_url: str
+    session: AsyncSession,
+    recs: list[tuple[Recommendation, Opportunity]],
+    web_url: str,
+    *,
+    today: date | None = None,
 ) -> list[dict[str, Any]]:
     names = dict((await session.execute(select(InstitutionRow.code, InstitutionRow.name))).all())
     items = []
+    today = today or today_kst()
     for rec, opp in recs:
         quote, note = await _best_evidence(session, opp.id)
         items.append(
@@ -103,7 +111,7 @@ async def build_items(
                 "stage": opp.stage,
                 "stage_label": STAGE_LABEL[Stage(opp.stage)],
                 "budget": format_krw(opp.est_budget_krw) if opp.est_budget_krw else None,
-                "when": _when_label(opp),
+                "when": _when_label(opp, today),
                 "window": _legacy_window(opp),
                 "score_pct": round(rec.score * 100),
                 "evidence": quote,
@@ -174,7 +182,7 @@ async def enqueue_alerts(
     batches = [[pair] for pair in fresh[:20]] if rule.mode == "instant" else [fresh[:15]]
     more = 0 if rule.mode == "instant" else max(len(fresh) - 15, 0)
     for batch in batches:
-        items = await build_items(session, batch, web_url)
+        items = await build_items(session, batch, web_url, today=today_kst(now))
         local = now.astimezone(KST)
         headline = (
             f"{items[0]['institution']} · {items[0]['title']}"

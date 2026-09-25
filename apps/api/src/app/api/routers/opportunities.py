@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import UTC, datetime
-from typing import Annotated
+from datetime import UTC, date, datetime
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query, status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy.orm import InstrumentedAttribute
 
 from app.api.deps import PrincipalDep, RuntimeDep, SessionDep
 from app.api.presenters import card, institution_names, signals_for_opportunity
@@ -26,14 +27,40 @@ from app.pipeline.brief import OpportunityNotFoundError, generate_brief
 router = APIRouter(prefix="/api/opportunities", tags=["opportunities"])
 
 
-def _encode_cursor(score: float, opp_id: int) -> str:
-    return base64.urlsafe_b64encode(json.dumps([score, opp_id]).encode()).decode()
+FeedSort = Literal["score", "soon", "recent"]
 
 
-def _decode_cursor(cursor: str) -> tuple[float, int]:
+def _sort_key(
+    sort: FeedSort, today: date
+) -> tuple[ColumnElement[Any] | InstrumentedAttribute[Any], bool]:
+    """(SQL key, ascending). "soon" orders by when the tender is due: a forecast window that
+    has already opened, or a tender already out, counts as today; no forecast sorts last."""
+    if sort == "soon":
+        return func.greatest(func.coalesce(Opportunity.bid_window_start, date.max), today), True
+    if sort == "recent":
+        return Opportunity.last_signal_at, False
+    return Recommendation.score, False
+
+
+def _encode_cursor(sort: FeedSort, value: Any, score: float, opp_id: int, day: date) -> str:
+    raw = value.isoformat() if isinstance(value, date) else value
+    payload = [sort, raw, score, opp_id, day.isoformat()]
+    return base64.urlsafe_b64encode(json.dumps(payload).encode()).decode()
+
+
+def _decode_cursor(cursor: str, sort: FeedSort) -> tuple[Any, float, int, date | None]:
+    """(key, score, id, day the first page was served). The day pins "soon", whose key depends
+    on today, so a page fetched after midnight continues the same ordering."""
     try:
-        score, opp_id = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-        return float(score), int(opp_id)
+        parts = json.loads(base64.urlsafe_b64decode(cursor.encode()))
+        if len(parts) == 2 and sort == "score":  # issued before there were sort options
+            score, opp_id = parts
+            return float(score), float(score), int(opp_id), None
+        cursor_sort, raw, score, opp_id, day = parts
+        if cursor_sort != sort:
+            raise ValueError("cursor from another sort order")
+        value = float(raw) if sort == "score" else date.fromisoformat(raw)
+        return value, float(score), int(opp_id), date.fromisoformat(day)
     except (ValueError, TypeError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "invalid cursor") from exc
 
@@ -47,13 +74,13 @@ async def feed(
     status_: Annotated[list[str] | None, Query(alias="status")] = None,
     q: str | None = None,
     include_dismissed: bool = False,
+    sort: FeedSort = "score",
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> FeedPage:
-    """The recommended feed: keyset-paginated on (score desc, id desc)."""
+    """The recommended feed, keyset-paginated on (sort key, id desc). ``stage_counts`` counts
+    the same filter per stage, ignoring the stage filter itself, for the stage chips."""
     conds = [Recommendation.org_id == principal.org.id]
-    if stage:
-        conds.append(Opportunity.stage.in_(stage))
     if category:
         conds.append(Opportunity.category.in_(category))
     conds.append(Opportunity.status.in_(status_ or ["open", "bid_open"]))
@@ -66,34 +93,54 @@ async def feed(
                 Recommendation.feedback.not_in(("dismissed", "irrelevant")),
             )
         )
-    base = (
-        select(Recommendation, Opportunity)
+    joined = select(Recommendation, Opportunity).join(
+        Opportunity, Opportunity.id == Recommendation.opportunity_id
+    )
+    per_stage = await session.execute(
+        select(Opportunity.stage, func.count())
+        .select_from(Recommendation)
         .join(Opportunity, Opportunity.id == Recommendation.opportunity_id)
         .where(and_(*conds))
+        .group_by(Opportunity.stage)
     )
-    total = await session.scalar(select(func.count()).select_from(base.subquery())) or 0
-    page_q = base
-    if cursor:
-        c_score, c_id = _decode_cursor(cursor)
-        page_q = page_q.where(
-            or_(
-                Recommendation.score < c_score,
-                and_(Recommendation.score == c_score, Opportunity.id < c_id),
-            )
-        )
-    rows = (
-        await session.execute(
-            page_q.order_by(Recommendation.score.desc(), Opportunity.id.desc()).limit(limit + 1)
-        )
-    ).all()
-    names = await institution_names(session)
+    stage_counts: dict[str, int] = {row[0]: row[1] for row in per_stage}
+    if stage:
+        conds.append(Opportunity.stage.in_(stage))
+    base = joined.where(and_(*conds))
+    total = (
+        sum(n for st, n in stage_counts.items() if st in stage)
+        if stage
+        else sum(stage_counts.values())
+    )
     today = today_kst()
-    items = [card(opp, names, rec, today) for rec, opp in rows[:limit]]
+    c_value = c_score = c_id = None
+    day = today
+    if cursor:
+        c_value, c_score, c_id, c_day = _decode_cursor(cursor, sort)
+        day = c_day or today
+    key, ascending = _sort_key(sort, day)
+    # Ties on the sort key (every window already open counts as "today") go to the better fit.
+    order = [
+        key.asc() if ascending else key.desc(),
+        Recommendation.score.desc(),
+        Opportunity.id.desc(),
+    ]
+    page_q = base.add_columns(key.label("sort_key"))
+    if cursor:
+        beyond = key > c_value if ascending else key < c_value
+        after_tie = or_(
+            Recommendation.score < c_score,
+            and_(Recommendation.score == c_score, Opportunity.id < c_id),
+        )
+        page_q = page_q.where(or_(beyond, and_(key == c_value, after_tie)))
+    rows = (await session.execute(page_q.order_by(*order).limit(limit + 1))).all()
+    names = await institution_names(session)
+    items = [card(opp, names, rec, today) for rec, opp, _ in rows[:limit]]
     next_cursor = None
     if len(rows) > limit:
-        last_rec, last_opp = rows[limit - 1]
-        next_cursor = _encode_cursor(last_rec.score, last_opp.id)
-    return FeedPage(items=items, next_cursor=next_cursor, total=total)
+        last_rec, last_opp, last_key = rows[limit - 1]
+        next_cursor = _encode_cursor(sort, last_key, last_rec.score, last_opp.id, day)
+    return FeedPage(items=items, next_cursor=next_cursor, total=total, stage_counts=stage_counts)
 
 
 @router.get("/{opportunity_id}", response_model=OpportunityDetail)

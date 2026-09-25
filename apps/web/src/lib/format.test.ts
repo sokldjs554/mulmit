@@ -32,11 +32,12 @@ describe("timing labels", () => {
   it("collapses a single-day window and shows month ranges otherwise", () => {
     expect(formatWindow("2027-03-01", "2027-03-01")).toBe("2027.03.01");
     expect(formatWindow("2027-03-01", "2027-06-30")).toBe("2027.03 ~ 2027.06");
+    expect(formatWindow("2026-11-05", "2026-11-30")).toBe("2026.11"); // what is left of a window
     expect(formatWindow(null, null)).toBe("미정");
   });
 
   it("switches from days to months after ~6 weeks", () => {
-    expect(leadLabel(0)).toBe("임박");
+    expect(leadLabel(0)).toBe("예상 기간 중");
     expect(leadLabel(30)).toBe("약 30일 후");
     expect(leadLabel(300)).toBe("약 10개월 후");
     expect(leadLabel(null)).toBeNull();

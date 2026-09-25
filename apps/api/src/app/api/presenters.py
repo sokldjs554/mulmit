@@ -27,6 +27,7 @@ from app.db.models import (
 )
 from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage
 from app.domain.taxonomy import CATEGORIES, Category
+from app.domain.timing import remaining_window
 
 _COMMITMENT_KO = {
     "committed": "의회에서 '반영하겠다'고 답함",
@@ -70,20 +71,30 @@ def explain(opp: Opportunity, breakdown: dict[str, Any] | None) -> list[str]:
     return reasons
 
 
+def shown_window(opp: Opportunity, today: date) -> tuple[date | None, date | None, bool]:
+    return remaining_window(
+        opp.bid_window_start, opp.bid_window_end, today, published=opp.bid_published_at
+    )
+
+
 def lead_days(opp: Opportunity, today: date) -> int | None:
-    if opp.bid_published_at or opp.bid_window_start is None:
+    """Days until the forecast window opens; 0 inside it; None once it has passed or the
+    tender is out."""
+    start, _, passed = shown_window(opp, today)
+    if opp.bid_published_at or start is None or passed:
         return None
-    return (opp.bid_window_start - today).days
+    return (start - today).days
 
 
-def head_start_days(opp: Opportunity) -> int | None:
+def head_start_days(opp: Opportunity, today: date) -> int | None:
     """How far ahead of the tender the first public signal came: up to the actual 입찰공고 when
-    there is one, else up to the start of the forecast window. None when the tender itself was
-    the first thing we saw — there was no head start to show."""
-    target = opp.bid_published_at or opp.bid_window_start
-    if target is None:
+    there is one, else up to the window as shown today (so a window that opened in January
+    counts to today). None when the tender itself was the first thing we saw, or when the
+    forecast window has passed with no tender — there is no head start to claim then."""
+    start, _, passed = shown_window(opp, today)
+    if start is None or passed:
         return None
-    days = (target - opp.first_seen_at).days
+    days = (start - opp.first_seen_at).days
     return days if days > 0 else None
 
 
@@ -97,6 +108,7 @@ def card(
     rec: Recommendation | None,
     today: date,
 ) -> OpportunityCard:
+    window_start, window_end, passed = shown_window(opp, today)
     return OpportunityCard(
         id=opp.id,
         title=opp.title,
@@ -110,8 +122,9 @@ def card(
         stage_label=STAGE_LABEL[Stage(opp.stage)],
         status=opp.status,
         est_budget_krw=opp.est_budget_krw,
-        bid_window_start=opp.bid_window_start,
-        bid_window_end=opp.bid_window_end,
+        bid_window_start=window_start,
+        bid_window_end=window_end,
+        window_passed=passed,
         bid_published_at=opp.bid_published_at,
         conversion_prob=opp.conversion_prob,
         signal_count=opp.signal_count,
@@ -121,7 +134,7 @@ def card(
         reasons=explain(opp, rec.breakdown if rec else None),
         feedback=rec.feedback if rec else None,
         lead_days=lead_days(opp, today),
-        head_start_days=head_start_days(opp),
+        head_start_days=head_start_days(opp, today),
     )
 
 

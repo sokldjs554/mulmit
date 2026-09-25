@@ -1,6 +1,7 @@
-import { ArrowRight, FileCheck2, GitMerge, Timer } from "lucide-react";
+import { FileCheck2, GitMerge, Timer } from "lucide-react";
 import Link from "next/link";
 
+import { DemoButton } from "@/components/landing/demo-button";
 import { Logo } from "@/components/layout/shell";
 import { buttonVariants } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/controls";
@@ -69,9 +70,7 @@ export default function Home() {
           영업을 시작할 만한 사업을 원문 문장과 함께 골라 드려요.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
-          <Link href="/login" className={cn(buttonVariants({ size: "lg" }))}>
-            데모로 둘러보기 <ArrowRight className="size-4" aria-hidden />
-          </Link>
+          <DemoButton />
           <Link href="/signup" className={cn(buttonVariants({ variant: "secondary", size: "lg" }))}>
             무료로 시작하기
           </Link>

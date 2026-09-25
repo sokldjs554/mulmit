@@ -75,7 +75,7 @@ export function ChipGroup({
   onChange,
   ariaLabel,
 }: {
-  options: { key: string; label: string }[];
+  options: { key: string; label: string; count?: number }[];
   value: string[];
   onChange: (next: string[]) => void;
   ariaLabel: string;
@@ -98,6 +98,9 @@ export function ChipGroup({
             )}
           >
             {opt.label}
+            {opt.count !== undefined ? (
+              <span className={cn("tabular ml-1.5", on ? "text-accent-text" : "text-muted")}>{opt.count}</span>
+            ) : null}
           </button>
         );
       })}

@@ -30,7 +30,7 @@ from app.db.models import (
 )
 from app.domain.krw import format_krw
 from app.domain.stages import STAGE_LABEL, Stage
-from app.domain.timing import month_span
+from app.domain.timing import month_span, remaining_window
 from app.llm.prompts import BriefFacts, BriefSignal, PastTender
 from app.runtime import Runtime
 
@@ -130,19 +130,26 @@ async def build_facts(
         )
     ).all()
     profile = await session.get(CompanyProfile, org_id)
+    today = today or today_kst()
+    window_start, window_end, passed = remaining_window(
+        opp.bid_window_start, opp.bid_window_end, today, published=opp.bid_published_at
+    )
+    if passed:  # keep the forecast that was missed, flagged, rather than a shifted one
+        window_start, window_end = opp.bid_window_start, opp.bid_window_end
     return BriefFacts(
-        today=today or today_kst(),
+        today=today,
         title=opp.title,
         institution=inst.name if inst else None,
         department=opp.department,
         stage=Stage(opp.stage),
         status=opp.status,
         est_budget_krw=opp.est_budget_krw,
-        window_start=opp.bid_window_start,
-        window_end=opp.bid_window_end,
+        window_start=window_start,
+        window_end=window_end,
         bid_published_at=opp.bid_published_at,
         best_commitment=opp.best_commitment,
         conversion_prob=opp.conversion_prob,
+        window_passed=passed,
         signals=tuple(
             BriefSignal(
                 observed_at=s.observed_at,
@@ -179,11 +186,10 @@ def template_brief(facts: BriefFacts) -> str:
     who = " ".join(x for x in (facts.institution, facts.department) if x)
     stage_label = STAGE_LABEL[facts.stage]
     span = month_span(facts.window_start, facts.window_end) if facts.window_start else None
-    last_day = facts.window_end or facts.window_start
     if facts.bid_published_at:
         timing = f"입찰공고는 {_dot(facts.bid_published_at)}에 나왔어요."
         when = f"- 입찰공고: {_dot(facts.bid_published_at)}"
-    elif span and last_day and last_day < facts.today:
+    elif span and facts.window_passed:
         timing = f"예상했던 입찰 시기({span})가 지났는데 아직 공고는 안 나왔어요."
         when = f"- 입찰 예상 시기: {span} (지났지만 아직 공고 없음)"
     elif span:
@@ -213,7 +219,9 @@ def template_brief(facts: BriefFacts) -> str:
             head += f" ({format_krw(s.budget_krw)})"
         said = _SAID.get(s.commitment or "") if s.stage is Stage.COUNCIL else None
         timeline.append(f"{head}. {said}" if said else head)
-        if s.one_line_quote.strip("…").strip():
+        # Quote what people said. Budget rows and procurement records are tables and field
+        # dumps; the line above already carries their date, stage and amount.
+        if s.stage is Stage.COUNCIL and s.one_line_quote.strip("…").strip():
             timeline.append(f"  > 「{s.one_line_quote}」")
 
     money = [

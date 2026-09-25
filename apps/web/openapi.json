@@ -262,7 +262,7 @@
           "opportunities"
         ],
         "summary": "Feed",
-        "description": "The recommended feed: keyset-paginated on (score desc, id desc).",
+        "description": "The recommended feed, keyset-paginated on (sort key, id desc). ``stage_counts`` counts\nthe same filter per stage, ignoring the stage filter itself, for the stage chips.",
         "operationId": "feed_api_opportunities_get",
         "parameters": [
           {
@@ -346,6 +346,21 @@
               "type": "boolean",
               "default": false,
               "title": "Include Dismissed"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "score",
+                "soon",
+                "recent"
+              ],
+              "type": "string",
+              "default": "score",
+              "title": "Sort"
             }
           },
           {
@@ -2119,6 +2134,14 @@
           "total": {
             "type": "integer",
             "title": "Total"
+          },
+          "stage_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Stage Counts",
+            "default": {}
           }
         },
         "type": "object",
@@ -2750,6 +2773,11 @@
             ],
             "title": "Bid Window End"
           },
+          "window_passed": {
+            "type": "boolean",
+            "title": "Window Passed",
+            "default": false
+          },
           "bid_published_at": {
             "anyOf": [
               {
@@ -2936,6 +2964,11 @@
               }
             ],
             "title": "Bid Window End"
+          },
+          "window_passed": {
+            "type": "boolean",
+            "title": "Window Passed",
+            "default": false
           },
           "bid_published_at": {
             "anyOf": [

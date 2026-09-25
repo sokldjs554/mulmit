@@ -125,6 +125,18 @@ class Query:
     exact: str | None = None  # exact (index-free) reference for recall, when approximate
 
 
+def _feed_sorted(order: str) -> str:
+    # the feed's other orders: every one of the org's open recommendations is sorted per page,
+    # tie-broken by score like the API
+    return (
+        "SELECT r.opportunity_id, r.score FROM recommendations r "
+        "JOIN opportunities o ON o.id = r.opportunity_id WHERE r.org_id = 7 "
+        "AND o.status IN ('open', 'bid_open') "
+        "AND (r.feedback IS NULL OR r.feedback NOT IN ('dismissed', 'irrelevant')) "
+        f"ORDER BY {order}, r.score DESC, o.id DESC LIMIT 21"
+    )
+
+
 def queries(vec: str, inst: str, ref_hit: str, ref_miss: str) -> list[Query]:
     open_ = "status IN ('open', 'bid_open')"
     return [
@@ -193,6 +205,34 @@ def queries(vec: str, inst: str, ref_hit: str, ref_miss: str) -> list[Query]:
             f"JOIN opportunities o ON o.id = r.opportunity_id WHERE r.org_id = 7 AND o.{open_} "
             "AND (r.feedback IS NULL OR r.feedback NOT IN ('dismissed', 'irrelevant')) "
             "ORDER BY r.score DESC, o.id DESC LIMIT 21",
+        ),
+        Query(
+            "feed_page_soon",
+            "고객 피드 첫 페이지 (입찰이 가까운 순 21건)",
+            _feed_sorted(
+                "greatest(coalesce(o.bid_window_start, date '9999-12-31'), date '2026-09-25') ASC"
+            ),
+            _feed_sorted(
+                "greatest(coalesce(o.bid_window_start, date '9999-12-31'), date '2026-09-25') ASC"
+            ),
+        ),
+        Query(
+            "feed_page_recent",
+            "고객 피드 첫 페이지 (새 소식 순 21건)",
+            _feed_sorted("o.last_signal_at DESC"),
+            _feed_sorted("o.last_signal_at DESC"),
+        ),
+        Query(
+            "feed_stage_counts",
+            "고객 피드 단계별 건수 (칩·머리말, GROUP BY)",
+            "SELECT o.stage, count(*) FROM recommendations r "
+            f"JOIN opportunities o ON o.id = r.opportunity_id WHERE r.org_id = 7 AND o.{open_} "
+            "AND (r.feedback IS NULL OR r.feedback NOT IN ('dismissed', 'irrelevant')) "
+            "GROUP BY o.stage",
+            "SELECT o.stage, count(*) FROM recommendations r "
+            f"JOIN opportunities o ON o.id = r.opportunity_id WHERE r.org_id = 7 AND o.{open_} "
+            "AND (r.feedback IS NULL OR r.feedback NOT IN ('dismissed', 'irrelevant')) "
+            "GROUP BY o.stage",
         ),
         Query(
             "admin_funnel",

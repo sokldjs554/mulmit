@@ -182,6 +182,7 @@ class BriefFacts:
     bid_published_at: date | None
     best_commitment: str | None
     conversion_prob: float
+    window_passed: bool = False  # the forecast window closed with no tender yet
     signals: tuple[BriefSignal, ...] = ()
     history: tuple[PastTender, ...] = ()
     profile: tuple[str, ...] = ()  # "- 소개: …" lines; empty when the org has no profile
@@ -201,7 +202,8 @@ class BriefFacts:
             *([f"- 부서: {self.department}"] if self.department else []),
             f"- 현재 단계: {STAGE_LABEL[self.stage]} ({STATUS_KO.get(self.status, self.status)})",
             f"- 추정 예산: {format_krw(self.est_budget_krw) if self.est_budget_krw else '미상'}",
-            f"- 입찰 예상 시기: {window}",
+            f"- 입찰 예상 시기: {window}"
+            + (" (이 기간이 지났지만 아직 입찰공고 없음)" if self.window_passed else ""),
             *([f"- 입찰공고일: {self.bid_published_at}"] if self.bid_published_at else []),
             f"- 가장 강한 의지 표현: {COMMITMENT_KO.get(self.best_commitment or '', '없음')}",
             f"- 공고 전환 확률(추정): {self.conversion_prob:.0%}",

@@ -150,7 +150,8 @@ export interface paths {
         };
         /**
          * Feed
-         * @description The recommended feed: keyset-paginated on (score desc, id desc).
+         * @description The recommended feed, keyset-paginated on (sort key, id desc). ``stage_counts`` counts
+         *     the same filter per stage, ignoring the stage filter itself, for the stage chips.
          */
         get: operations["feed_api_opportunities_get"];
         put?: never;
@@ -821,6 +822,13 @@ export interface components {
             next_cursor: string | null;
             /** Total */
             total: number;
+            /**
+             * Stage Counts
+             * @default {}
+             */
+            stage_counts: {
+                [key: string]: number;
+            };
         };
         /** FeedbackIn */
         FeedbackIn: {
@@ -1038,6 +1046,11 @@ export interface components {
             bid_window_start: string | null;
             /** Bid Window End */
             bid_window_end: string | null;
+            /**
+             * Window Passed
+             * @default false
+             */
+            window_passed: boolean;
             /** Bid Published At */
             bid_published_at: string | null;
             /** Conversion Prob */
@@ -1090,6 +1103,11 @@ export interface components {
             bid_window_start: string | null;
             /** Bid Window End */
             bid_window_end: string | null;
+            /**
+             * Window Passed
+             * @default false
+             */
+            window_passed: boolean;
             /** Bid Published At */
             bid_published_at: string | null;
             /** Conversion Prob */
@@ -1637,6 +1655,7 @@ export interface operations {
                 status?: string[] | null;
                 q?: string | null;
                 include_dismissed?: boolean;
+                sort?: "score" | "soon" | "recent";
                 cursor?: string | null;
                 limit?: number;
             };

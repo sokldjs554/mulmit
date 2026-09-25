@@ -158,25 +158,20 @@ def test_test_notifications_say_what_they_are() -> None:
 def test_alert_timing_reads_as_a_date_or_a_forecast() -> None:
     from app.notify.dispatch import _when_label
 
-    def opp(**kw: object) -> Opportunity:
-        return Opportunity(
-            **{"bid_published_at": None, "bid_window_start": None, "bid_window_end": None, **kw}
+    def when(start: date | None = None, end: date | None = None, **kw: object) -> str:
+        opp = Opportunity(
+            **{"bid_published_at": None, "bid_window_start": start, "bid_window_end": end, **kw}
         )
+        return _when_label(opp, date(2026, 6, 15))
 
-    assert _when_label(opp(bid_published_at=date(2026, 6, 1))) == "2026.06.01 입찰공고"
-    assert (
-        _when_label(opp(bid_window_start=date(2026, 7, 1), bid_window_end=date(2026, 12, 31)))
-        == "입찰 예상 2026년 7~12월"
-    )
-    assert (
-        _when_label(opp(bid_window_start=date(2026, 11, 1), bid_window_end=date(2027, 2, 28)))
-        == "입찰 예상 2026년 11월~2027년 2월"
-    )
-    assert (
-        _when_label(opp(bid_window_start=date(2026, 7, 1), bid_window_end=date(2026, 7, 31)))
-        == "입찰 예상 2026년 7월"
-    )
-    assert _when_label(opp()) == "입찰 시기 미정"
+    assert when(bid_published_at=date(2026, 6, 1)) == "2026.06.01 입찰공고"
+    assert when(date(2026, 7, 1), date(2026, 12, 31)) == "입찰 예상 2026년 7~12월"
+    assert when(date(2026, 11, 1), date(2027, 2, 28)) == "입찰 예상 2026년 11월~2027년 2월"
+    assert when(date(2026, 7, 1), date(2026, 7, 31)) == "입찰 예상 2026년 7월"
+    assert when() == "입찰 시기 미정"
+    # a window that has opened is what is left of it; one that has closed says so
+    assert when(date(2026, 1, 1), date(2026, 11, 30)) == "입찰 예상 2026년 6~11월"
+    assert when(date(2026, 1, 1), date(2026, 3, 31)) == "예상 시기(2026년 1~3월) 지남, 아직 공고 전"
 
 
 def test_slack_and_kakao_render() -> None:
@@ -265,6 +260,25 @@ def test_ranker_prefers_actionable_lead_time() -> None:
     )
     assert early.score > closing.score
     assert early.breakdown["keyword_hits"] == ["스마트쉘터"]
+
+
+def test_ranker_does_not_call_a_missed_window_imminent() -> None:
+    today = date(2026, 9, 25)
+    inside = score_opportunity(
+        _opp(bid_window_start=date(2026, 1, 15), bid_window_end=date(2026, 11, 30)),
+        _profile(),
+        "11680",
+        today,
+    )
+    missed = score_opportunity(
+        _opp(bid_window_start=date(2026, 1, 15), bid_window_end=date(2026, 3, 31)),
+        _profile(),
+        "11680",
+        today,
+    )
+    assert inside.breakdown["features"]["lead_time"] == 0.75
+    assert missed.breakdown["features"]["lead_time"] == 0.35
+    assert missed.score < inside.score
 
 
 def test_ranker_excluded_keywords_bury_result() -> None:
