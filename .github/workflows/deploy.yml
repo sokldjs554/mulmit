@@ -18,7 +18,7 @@ concurrency:
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION || 'asia-northeast3' }}
-  REGISTRY: ${{ vars.GCP_REGION || 'asia-northeast3' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/mulmit
+  REGISTRY: ${{ vars.GCP_REGION || 'asia-northeast3' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/images
 
 jobs:
   deploy:
@@ -52,18 +52,18 @@ jobs:
           cache-to: type=gha,mode=max,scope=web
       - name: Run migrations (Cloud Run job) before any service sees the new code
         run: |
-          gcloud run jobs update mulmit-migrate --region "$REGION" --image "$REGISTRY/api:$GITHUB_SHA" \
-            --command mulmit --args db,upgrade
-          gcloud run jobs execute mulmit-migrate --region "$REGION" --wait
+          gcloud run jobs update app-migrate --region "$REGION" --image "$REGISTRY/api:$GITHUB_SHA" \
+            --command manage --args db,upgrade
+          gcloud run jobs execute app-migrate --region "$REGION" --wait
       - name: Roll out worker, API and web
         run: |
-          gcloud run deploy mulmit-worker --region "$REGION" --image "$REGISTRY/api:$GITHUB_SHA" \
-            --command mulmit --args worker
-          gcloud run deploy mulmit-api --region "$REGION" --image "$REGISTRY/api:$GITHUB_SHA"
-          gcloud run deploy mulmit-web --region "$REGION" --image "$REGISTRY/web:$GITHUB_SHA"
+          gcloud run deploy app-worker --region "$REGION" --image "$REGISTRY/api:$GITHUB_SHA" \
+            --command manage --args worker
+          gcloud run deploy app-api --region "$REGION" --image "$REGISTRY/api:$GITHUB_SHA"
+          gcloud run deploy app-web --region "$REGION" --image "$REGISTRY/web:$GITHUB_SHA"
       - name: Smoke test through the public web service (the API itself is internal-only)
         run: |
-          url=$(gcloud run services describe mulmit-web --region "$REGION" --format 'value(status.url)')
+          url=$(gcloud run services describe app-web --region "$REGION" --format 'value(status.url)')
           curl -fsS -o /dev/null "$url/login"
           # 401 (not 502/504) proves the web → internal API route works without credentials
           test "$(curl -s -o /dev/null -w '%{http_code}' "$url/api/me")" = "401"

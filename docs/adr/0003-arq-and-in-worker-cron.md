@@ -8,7 +8,7 @@
 - **작업 ID = 작업 대상**(`process:<doc>:<hash>`, `ingest:<source>:<window>`): 같은 일을 두 번 넣어도 한 번만 실행됩니다(웹훅 재전송, 겹친 cron, 더블 클릭).
 - **cron은 워커 안에서** KST 기준으로 실행합니다. arq는 cron 실행도 작업 ID로 중복 제거하므로 워커가 여러 대여도 한 번만 돕니다. Cloud Scheduler + HTTP 엔드포인트 조합보다 움직이는 부품이 적습니다.
 - 모든 실행은 `job_runs` 테이블에 기록(`tracked` 데코레이터): 상태, 시도 횟수, 결과 요약, 오류, 원래 인자(재실행용). 한도 초과는 KST 자정 이후로, 서킷 오픈은 쿨다운 이후로, 일시 오류는 지수 백오프로 `Retry`.
-- Cloud Run에서는 `mulmit worker`가 `$PORT`에 `/healthz`를 열고, arq의 Redis 하트비트가 끊기면 503을 돌려 인스턴스를 교체하게 합니다. 워커는 CPU 상시 할당 1대.
+- Cloud Run에서는 `manage worker`가 `$PORT`에 `/healthz`를 열고, arq의 Redis 하트비트가 끊기면 503을 돌려 인스턴스를 교체하게 합니다. 워커는 CPU 상시 할당 1대.
 
 ## 결과
 - 얻은 것: 코드 한 벌(API와 워커가 같은 이미지), 운영 콘솔에서 작업 로그·재실행.

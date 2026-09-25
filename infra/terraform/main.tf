@@ -25,7 +25,7 @@ resource "google_project_service" "enabled" {
 
 resource "google_artifact_registry_repository" "images" {
   location      = var.region
-  repository_id = "mulmit"
+  repository_id = "images"
   format        = "DOCKER"
   description   = "API/worker and web images"
 
@@ -49,7 +49,7 @@ resource "google_artifact_registry_repository" "images" {
 
 # Raw documents (PDF/HWP/HWPX, API payloads), content-addressed by sha256.
 resource "google_storage_bucket" "raw" {
-  name                        = "${var.project_id}-mulmit-raw"
+  name                        = "${var.project_id}-app-raw"
   location                    = var.region
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"

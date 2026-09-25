@@ -10,13 +10,13 @@ import anthropic
 import httpx
 import pytest
 
-from mulmit.llm.budget import MemorySpendGuard
-from mulmit.llm.prompts import EXTRACT_SYSTEM, ChunkContext, extract_user_message
-from mulmit.llm.providers.anthropic_provider import AnthropicProvider
-from mulmit.llm.providers.heuristic import HeuristicProvider
-from mulmit.llm.schemas import ExtractionOutput, strict_json_schema
-from mulmit.llm.service import LLMService
-from mulmit.llm.types import LLMRefusedError, LLMUnavailableError, Usage
+from app.llm.budget import MemorySpendGuard
+from app.llm.prompts import EXTRACT_SYSTEM, ChunkContext, extract_user_message
+from app.llm.providers.anthropic_provider import AnthropicProvider
+from app.llm.providers.heuristic import HeuristicProvider
+from app.llm.schemas import ExtractionOutput, strict_json_schema
+from app.llm.service import LLMService
+from app.llm.types import LLMRefusedError, LLMUnavailableError, Usage
 
 CTX = ChunkContext(
     doc_type="council_minutes",
@@ -250,13 +250,13 @@ def test_usage_cost_accounts_for_cache() -> None:
     ],
 )
 def test_heuristic_titles_read_like_project_names(answer: str, expected: str) -> None:
-    from mulmit.llm.providers.heuristic import _guess_title
+    from app.llm.providers.heuristic import _guess_title
 
     assert _guess_title(answer, "") == expected
 
 
 def test_template_brief_advice_follows_the_stage_reached() -> None:
-    from mulmit.pipeline.brief import template_brief
+    from app.pipeline.brief import template_brief
 
     def facts(stage: str, last_commitment: str) -> str:
         return "\n".join(

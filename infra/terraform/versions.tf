@@ -12,7 +12,7 @@ terraform {
     }
   }
 
-  # terraform init -backend-config="bucket=<state-bucket>" -backend-config="prefix=mulmit"
+  # terraform init -backend-config="bucket=<state-bucket>" -backend-config="prefix=app"
   backend "gcs" {}
 }
 

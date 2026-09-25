@@ -1503,97 +1503,6 @@ wheels = [
 ]
 
 [[package]]
-name = "mulmit"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "aiosmtplib" },
-    { name = "alembic" },
-    { name = "anthropic" },
-    { name = "argon2-cffi" },
-    { name = "arq" },
-    { name = "asyncpg" },
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "jinja2" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
-    { name = "olefile" },
-    { name = "pgvector" },
-    { name = "pillow" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyjwt" },
-    { name = "pypdf" },
-    { name = "pypdfium2" },
-    { name = "rapidfuzz" },
-    { name = "redis" },
-    { name = "reportlab" },
-    { name = "sentry-sdk", extra = ["fastapi"] },
-    { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "structlog" },
-    { name = "typer" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-gcp = [
-    { name = "google-cloud-storage" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiosmtplib", specifier = ">=3.0" },
-    { name = "alembic", specifier = ">=1.13" },
-    { name = "anthropic", specifier = ">=1.8" },
-    { name = "argon2-cffi", specifier = ">=23.1" },
-    { name = "arq", specifier = ">=0.26" },
-    { name = "asyncpg", specifier = ">=0.29" },
-    { name = "cryptography", specifier = ">=43" },
-    { name = "fastapi", specifier = ">=0.115" },
-    { name = "google-cloud-storage", marker = "extra == 'gcp'", specifier = ">=2.18" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "jinja2", specifier = ">=3.1" },
-    { name = "numpy", specifier = ">=2.0" },
-    { name = "olefile", specifier = ">=0.47" },
-    { name = "pgvector", specifier = ">=0.3.2" },
-    { name = "pillow", specifier = ">=10.4" },
-    { name = "pydantic", specifier = ">=2.8" },
-    { name = "pydantic-settings", specifier = ">=2.4" },
-    { name = "pyjwt", specifier = ">=2.9" },
-    { name = "pypdf", specifier = ">=5.0" },
-    { name = "pypdfium2", specifier = ">=4.30" },
-    { name = "rapidfuzz", specifier = ">=3.9" },
-    { name = "redis", specifier = ">=5.0" },
-    { name = "reportlab", specifier = ">=4.2" },
-    { name = "sentry-sdk", extras = ["fastapi"], specifier = ">=2.13" },
-    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.32" },
-    { name = "structlog", specifier = ">=24.4" },
-    { name = "typer", specifier = ">=0.12" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
-]
-provides-extras = ["gcp"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.11" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "pytest-asyncio", specifier = ">=0.24" },
-    { name = "pytest-cov", specifier = ">=5.0" },
-    { name = "ruff", specifier = ">=0.6" },
-]
-
-[[package]]
 name = "mypy"
 version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1962,6 +1871,97 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
+name = "procurement-forecast"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "aiosmtplib" },
+    { name = "alembic" },
+    { name = "anthropic" },
+    { name = "argon2-cffi" },
+    { name = "arq" },
+    { name = "asyncpg" },
+    { name = "cryptography" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "olefile" },
+    { name = "pgvector" },
+    { name = "pillow" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt" },
+    { name = "pypdf" },
+    { name = "pypdfium2" },
+    { name = "rapidfuzz" },
+    { name = "redis" },
+    { name = "reportlab" },
+    { name = "sentry-sdk", extra = ["fastapi"] },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "structlog" },
+    { name = "typer" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+gcp = [
+    { name = "google-cloud-storage" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiosmtplib", specifier = ">=3.0" },
+    { name = "alembic", specifier = ">=1.13" },
+    { name = "anthropic", specifier = ">=1.8" },
+    { name = "argon2-cffi", specifier = ">=23.1" },
+    { name = "arq", specifier = ">=0.26" },
+    { name = "asyncpg", specifier = ">=0.29" },
+    { name = "cryptography", specifier = ">=43" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "google-cloud-storage", marker = "extra == 'gcp'", specifier = ">=2.18" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "jinja2", specifier = ">=3.1" },
+    { name = "numpy", specifier = ">=2.0" },
+    { name = "olefile", specifier = ">=0.47" },
+    { name = "pgvector", specifier = ">=0.3.2" },
+    { name = "pillow", specifier = ">=10.4" },
+    { name = "pydantic", specifier = ">=2.8" },
+    { name = "pydantic-settings", specifier = ">=2.4" },
+    { name = "pyjwt", specifier = ">=2.9" },
+    { name = "pypdf", specifier = ">=5.0" },
+    { name = "pypdfium2", specifier = ">=4.30" },
+    { name = "rapidfuzz", specifier = ">=3.9" },
+    { name = "redis", specifier = ">=5.0" },
+    { name = "reportlab", specifier = ">=4.2" },
+    { name = "sentry-sdk", extras = ["fastapi"], specifier = ">=2.13" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.32" },
+    { name = "structlog", specifier = ">=24.4" },
+    { name = "typer", specifier = ">=0.12" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
+]
+provides-extras = ["gcp"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=1.11" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "pytest-cov", specifier = ">=5.0" },
+    { name = "ruff", specifier = ">=0.6" },
 ]
 
 [[package]]

@@ -28,16 +28,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra gcp
 
 FROM base AS runtime
-RUN useradd --system --uid 10001 --home-dir /app mulmit \
+RUN useradd --system --uid 10001 --home-dir /app app \
  && mkdir -p /app/.data \
- && chown mulmit /app/.data
+ && chown app /app/.data
 WORKDIR /app
 COPY --from=build --chown=root:root /app /app
 ENV PATH="/app/.venv/bin:$PATH" \
-    MULMIT_STORAGE_URL=file:///app/.data/raw
-USER mulmit
+    APP_STORAGE_URL=file:///app/.data/raw
+USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s \
   CMD python -c "import urllib.request,os; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"8000\")}/healthz', timeout=2)"
 # Cloud Run injects PORT; forwarded headers come from its front end.
-CMD ["sh", "-c", "exec uvicorn mulmit.api.app:create_app --factory --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*' --no-server-header"]
+CMD ["sh", "-c", "exec uvicorn app.api.app:create_app --factory --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*' --no-server-header"]

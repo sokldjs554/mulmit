@@ -4,21 +4,21 @@
 
 locals {
   runtime_env = {
-    MULMIT_ENV                = "production"
-    MULMIT_LOG_JSON           = "true"
-    MULMIT_STORAGE_URL        = "gs://${google_storage_bucket.raw.name}/raw"
-    MULMIT_PUBLIC_WEB_URL     = var.web_url
-    MULMIT_CORS_ORIGINS       = jsonencode(var.web_url == "" ? [] : [var.web_url])
-    MULMIT_COOKIE_SECURE      = "true"
-    MULMIT_LLM_PROVIDER       = var.llm_provider
-    MULMIT_PAYMENT_PROVIDER   = var.payment_provider
-    MULMIT_TOSS_CLIENT_KEY    = var.toss_client_key
-    MULMIT_EMBEDDING_PROVIDER = contains(keys(var.mounted_external_secrets), "MULMIT_VOYAGE_API_KEY") ? "voyage" : "hashing"
+    APP_ENV                = "production"
+    APP_LOG_JSON           = "true"
+    APP_STORAGE_URL        = "gs://${google_storage_bucket.raw.name}/raw"
+    APP_PUBLIC_WEB_URL     = var.web_url
+    APP_CORS_ORIGINS       = jsonencode(var.web_url == "" ? [] : [var.web_url])
+    APP_COOKIE_SECURE      = "true"
+    APP_LLM_PROVIDER       = var.llm_provider
+    APP_PAYMENT_PROVIDER   = var.payment_provider
+    APP_TOSS_CLIENT_KEY    = var.toss_client_key
+    APP_EMBEDDING_PROVIDER = contains(keys(var.mounted_external_secrets), "APP_VOYAGE_API_KEY") ? "voyage" : "hashing"
   }
 }
 
 resource "google_cloud_run_v2_service" "api" {
-  name                = "mulmit-api"
+  name                = "app-api"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY" # reachable from the web service, not the internet
   deletion_protection = false
@@ -106,7 +106,7 @@ resource "google_cloud_run_v2_service" "api" {
 }
 
 resource "google_cloud_run_v2_service" "worker" {
-  name                = "mulmit-worker"
+  name                = "app-worker"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
   deletion_protection = false
@@ -133,7 +133,7 @@ resource "google_cloud_run_v2_service" "worker" {
       image = local.placeholder_image
 
       ports {
-        container_port = 8080 # `mulmit worker` serves /healthz here
+        container_port = 8080 # `manage worker` serves /healthz here
       }
 
       resources {
@@ -202,7 +202,7 @@ resource "google_cloud_run_v2_service" "worker" {
 }
 
 resource "google_cloud_run_v2_job" "migrate" {
-  name                = "mulmit-migrate"
+  name                = "app-migrate"
   location            = var.region
   deletion_protection = false
 
@@ -263,7 +263,7 @@ resource "google_cloud_run_v2_job" "migrate" {
 }
 
 resource "google_cloud_run_v2_service" "web" {
-  name                = "mulmit-web"
+  name                = "app-web"
   location            = var.region
   ingress             = "INGRESS_TRAFFIC_ALL"
   deletion_protection = false

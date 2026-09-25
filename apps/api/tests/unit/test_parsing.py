@@ -3,10 +3,10 @@ import zlib
 
 import pytest
 
-from mulmit.demo.synth import render_hwpx
-from mulmit.parsing.chunking import chunk_budget, chunk_minutes, split_turns
-from mulmit.parsing.dispatch import decode_text, structured_to_text
-from mulmit.parsing.hwp import (
+from app.demo.synth import render_hwpx
+from app.parsing.chunking import chunk_budget, chunk_minutes, split_turns
+from app.parsing.dispatch import decode_text, structured_to_text
+from app.parsing.hwp import (
     HWPTAG_PARA_TEXT,
     HwpError,
     decode_para_text,
@@ -14,8 +14,8 @@ from mulmit.parsing.hwp import (
     iter_records,
     section_text,
 )
-from mulmit.parsing.ocr_correct import LexiconCorrector, correct_ocr_text, fix_numbers
-from mulmit.sources.clik import html_to_text
+from app.parsing.ocr_correct import LexiconCorrector, correct_ocr_text, fix_numbers
+from app.sources.clik import html_to_text
 
 MINUTES = """제301회 강남구의회 임시회
 (10시 02분 개의)

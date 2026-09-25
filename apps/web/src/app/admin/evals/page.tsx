@@ -139,7 +139,7 @@ export default function EvalsPage() {
   const ocr = latest("ocr");
   return (
     <div className="space-y-6">
-      <PageHeader title="평가·백테스트" description="프롬프트·파서·랭커를 바꾸기 전과 후를 같은 정답으로 비교합니다 (mulmit eval all --record)." />
+      <PageHeader title="평가·백테스트" description="프롬프트·파서·랭커를 바꾸기 전과 후를 같은 정답으로 비교합니다 (manage eval all --record)." />
       <div className="flex items-start gap-2 rounded-lg border border-line bg-surface px-4 py-3 text-[13px] text-ink-2">
         <Info className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
         합성 세계(synthetic world)의 수치는 파이프라인이 설계대로 동작하는지 보여줄 뿐 실제 데이터의 정확도가 아닙니다. 생성기와 다른 문장으로 쓴
@@ -149,7 +149,7 @@ export default function EvalsPage() {
       {evals.isLoading ? <Skeleton className="h-96" /> : null}
       {!evals.isLoading && runs.length === 0 ? (
         <Card>
-          <EmptyState title="아직 평가 기록이 없습니다" description="mulmit eval all --record 를 실행하세요." />
+          <EmptyState title="아직 평가 기록이 없습니다" description="manage eval all --record 를 실행하세요." />
         </Card>
       ) : null}
       {backtest ? <Backtest run={backtest} /> : null}

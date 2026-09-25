@@ -1,4 +1,4 @@
-# @mulmit/web
+# web
 
 발주 예측의 고객용 웹과 운영 콘솔 (Next.js 16 App Router · React 19 · TypeScript · Tailwind v4 · TanStack Query).
 

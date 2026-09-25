@@ -60,16 +60,16 @@
 
 | 공고 항목 | 이 저장소에서 | 위치 |
 |---|---|---|
-| FastAPI 비동기 API | 앱 팩토리, async SQLAlchemy, 키셋 페이지네이션, 요청 ID·구조화 로그, 과금 API의 `Idempotency-Key` | [`api/`](apps/api/src/mulmit/api) |
-| Redis 큐·cron 배치 | arq 워커 + KST cron, 작업 ID 중복 제거, 한도 초과·서킷·일시 오류별 재시도, 모든 실행 `job_runs` 기록 | [`worker/`](apps/api/src/mulmit/worker), [ADR-0003](docs/adr/0003-arq-and-in-worker-cron.md) |
+| FastAPI 비동기 API | 앱 팩토리, async SQLAlchemy, 키셋 페이지네이션, 요청 ID·구조화 로그, 과금 API의 `Idempotency-Key` | [`api/`](apps/api/src/app/api) |
+| Redis 큐·cron 배치 | arq 워커 + KST cron, 작업 ID 중복 제거, 한도 초과·서킷·일시 오류별 재시도, 모든 실행 `job_runs` 기록 | [`worker/`](apps/api/src/app/worker), [ADR-0003](docs/adr/0003-arq-and-in-worker-cron.md) |
 | PostgreSQL 스키마·마이그레이션·쿼리 튜닝 | Alembic(비동기), 24개 테이블, pgvector HNSW, pg_trgm GIN, 부분 인덱스, `FOR UPDATE SKIP LOCKED`, CHECK 제약 | [`migrations/`](apps/api/migrations), [ADR-0004](docs/adr/0004-postgres-only-search.md) |
 | Next.js/TypeScript 사용자 웹·어드민 | App Router 고객 앱 + 운영 콘솔, OpenAPI 생성 타입, TanStack Query, BFF 프록시, SVG 차트 | [`apps/web`](apps/web), [ADR-0008](docs/adr/0008-bff-and-typed-client.md) |
-| LLM 파이프라인 (프롬프트·구조화 출력·검증·품질 평가·비용 최적화) | structured outputs, 프롬프트 캐싱, effort 조절, 서버 측 fallback, 근거 검증기, 트리아지, 콘텐츠 해시 캐시, 일일 예산 가드, 평가 러너 | [`llm/`](apps/api/src/mulmit/llm), [`domain/grounding.py`](apps/api/src/mulmit/domain/grounding.py), [ADR-0002](docs/adr/0002-grounded-extraction.md), [ADR-0006](docs/adr/0006-one-model-low-effort.md) |
-| 비정형 문서 파싱·OCR | PDF 페이지별 텍스트층 판정 → tesseract `kor+eng` OCR + 후보정, HWP5 레코드 파서, HWPX | [`parsing/`](apps/api/src/mulmit/parsing) |
-| 대규모 데이터 수집·정규화 | 토큰 버킷 + KST 일일 한도(Redis Lua), 서킷 브레이커, HTTP 200 오류 본문 분류, 한국어 금액·기관·시점 정규화 | [`sources/`](apps/api/src/mulmit/sources), [`domain/`](apps/api/src/mulmit/domain), [데이터 소스](docs/data-sources.md) |
-| 검색·추천·랭킹 | 임베딩 + 규칙 결합 연결, 특징별 가중 랭킹과 설명, 백테스트로 전환율 보정, 사용자 피드백 | [`pipeline/`](apps/api/src/mulmit/pipeline) |
-| 멀티채널 알림 | 이메일(Jinja2)·Slack 웹훅·카카오 알림톡(Solapi HMAC), 중복 방지, 방해 금지 시간, 영구 오류 시 채널 비활성화 | [`notify/`](apps/api/src/mulmit/notify) |
-| 구독·크레딧 결제 | 토스 빌링키(Fernet 암호화), 멱등 결제·웹훅 대사, 추가 전용 크레딧 원장, 1·3·7일 재시도 | [`billing/`](apps/api/src/mulmit/billing), [ADR-0005](docs/adr/0005-credit-ledger.md) |
+| LLM 파이프라인 (프롬프트·구조화 출력·검증·품질 평가·비용 최적화) | structured outputs, 프롬프트 캐싱, effort 조절, 서버 측 fallback, 근거 검증기, 트리아지, 콘텐츠 해시 캐시, 일일 예산 가드, 평가 러너 | [`llm/`](apps/api/src/app/llm), [`domain/grounding.py`](apps/api/src/app/domain/grounding.py), [ADR-0002](docs/adr/0002-grounded-extraction.md), [ADR-0006](docs/adr/0006-one-model-low-effort.md) |
+| 비정형 문서 파싱·OCR | PDF 페이지별 텍스트층 판정 → tesseract `kor+eng` OCR + 후보정, HWP5 레코드 파서, HWPX | [`parsing/`](apps/api/src/app/parsing) |
+| 대규모 데이터 수집·정규화 | 토큰 버킷 + KST 일일 한도(Redis Lua), 서킷 브레이커, HTTP 200 오류 본문 분류, 한국어 금액·기관·시점 정규화 | [`sources/`](apps/api/src/app/sources), [`domain/`](apps/api/src/app/domain), [데이터 소스](docs/data-sources.md) |
+| 검색·추천·랭킹 | 임베딩 + 규칙 결합 연결, 특징별 가중 랭킹과 설명, 백테스트로 전환율 보정, 사용자 피드백 | [`pipeline/`](apps/api/src/app/pipeline) |
+| 멀티채널 알림 | 이메일(Jinja2)·Slack 웹훅·카카오 알림톡(Solapi HMAC), 중복 방지, 방해 금지 시간, 영구 오류 시 채널 비활성화 | [`notify/`](apps/api/src/app/notify) |
+| 구독·크레딧 결제 | 토스 빌링키(Fernet 암호화), 멱등 결제·웹훅 대사, 추가 전용 크레딧 원장, 1·3·7일 재시도 | [`billing/`](apps/api/src/app/billing), [ADR-0005](docs/adr/0005-credit-ledger.md) |
 | 클라우드 컨테이너 배포·로깅·에러 트래킹 | Docker, Cloud Run(API 내부 전용·워커 상시), Cloud SQL, Memorystore, Secret Manager, WIF 배포, structlog JSON, Sentry | [`infra/terraform`](infra/terraform), [배포 워크플로](.github/workflows/deploy.yml) |
 | 의사결정 문서화 | ADR 8건, 아키텍처·런북·데이터 소스·평가 문서 | [`docs/`](docs) |
 | 테스트·정적 타입 | pytest 122개(실제 PostgreSQL·Redis 통합 테스트 포함), vitest 13개, mypy strict, TypeScript strict | [`apps/api/tests`](apps/api/tests) |
@@ -123,7 +123,7 @@ flowchart LR
 
 그 밖에: [랜딩](docs/screenshots/landing.png) · [회사 프로필](docs/screenshots/profile.png) · [알림 설정](docs/screenshots/alerts.png) · [수집원](docs/screenshots/admin-sources.png) · [작업 로그](docs/screenshots/admin-jobs.png) · [LLM 비용](docs/screenshots/admin-llm.png) · [모바일](docs/screenshots/feed-mobile.png)
 
-<sub>스크린샷은 사례가 더 많은 `mulmit seed --scale 1.5` 데모 세계에서 찍었습니다.</sub>
+<sub>스크린샷은 사례가 더 많은 `manage seed --scale 1.5` 데모 세계에서 찍었습니다.</sub>
 
 ## 실행하기
 
@@ -132,8 +132,8 @@ flowchart LR
 ```bash
 cp .env.example .env            # 비워 둬도 오프라인 데모가 동작합니다
 docker compose up -d --build    # 웹 :3000, API :8000/docs, 메일 확인 :8025
-docker compose run --rm api mulmit seed --anchor 2026-09-25
-docker compose run --rm api mulmit demo run
+docker compose run --rm api manage seed --anchor 2026-09-25
+docker compose run --rm api manage demo run
 ```
 
 ### 로컬 개발
@@ -154,19 +154,19 @@ make lint test eval
 
 | 계정 | 비밀번호 | 역할 |
 |---|---|---|
-| `demo@mulmit.dev` | `mulmit-demo-1234` | Pro 플랜, 스마트쉘터·스마트폴·지능형 CCTV 기업 |
-| `care@mulmit.dev` | `mulmit-demo-1234` | 무료 플랜, AI 돌봄 스피커 스타트업 |
-| `admin@mulmit.dev` | `mulmit-admin-1234` | 운영 콘솔(`/admin`) |
+| `demo@example.com` | `demo-pass-1234` | Pro 플랜, 스마트쉘터·스마트폴·지능형 CCTV 기업 |
+| `care@example.com` | `demo-pass-1234` | 무료 플랜, AI 돌봄 스피커 스타트업 |
+| `admin@example.com` | `admin-pass-1234` | 운영 콘솔(`/admin`) |
 
 ### 실제 키로 켜기
 
-`.env`에 넣으면 해당 부분만 실제 서비스로 바뀝니다: `MULMIT_ANTHROPIC_API_KEY` + `MULMIT_LLM_PROVIDER=anthropic`, `MULMIT_VOYAGE_API_KEY`, `MULMIT_CLIK_API_KEY`, `MULMIT_DATA_GO_KR_SERVICE_KEY`, `MULMIT_LOFIN_API_KEY`, 토스(`MULMIT_PAYMENT_PROVIDER=toss`), Solapi. 전체 목록은 [.env.example](.env.example).
+`.env`에 넣으면 해당 부분만 실제 서비스로 바뀝니다: `APP_ANTHROPIC_API_KEY` + `APP_LLM_PROVIDER=anthropic`, `APP_VOYAGE_API_KEY`, `APP_CLIK_API_KEY`, `APP_DATA_GO_KR_SERVICE_KEY`, `APP_LOFIN_API_KEY`, 토스(`APP_PAYMENT_PROVIDER=toss`), Solapi. 전체 목록은 [.env.example](.env.example).
 
 ## 저장소 구조
 
 ```
 apps/api/             FastAPI · arq 워커 · 파이프라인 (Python 3.11, uv)
-  src/mulmit/
+  src/app/
     sources/          공공 API 어댑터, 한도·서킷·재시도
     parsing/          PDF 텍스트층, OCR(+후보정), HWP5/HWPX, 청크
     llm/              Claude 제공자, 규칙 기반 추출기, 캐시·예산 가드

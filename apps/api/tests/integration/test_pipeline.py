@@ -2,15 +2,15 @@ from datetime import date
 
 from sqlalchemy import func, select
 
-from mulmit.db.models import (
+from app.db.models import (
     Opportunity,
     OpportunitySignal,
     Recommendation,
     Signal,
     User,
 )
-from mulmit.db.session import session_scope
-from mulmit.pipeline.backtest import run_backtest
+from app.db.session import session_scope
+from app.pipeline.backtest import run_backtest
 
 
 async def test_pipeline_builds_multi_stage_opportunities(demo_world) -> None:  # type: ignore[no-untyped-def]
@@ -43,7 +43,7 @@ async def test_pipeline_builds_multi_stage_opportunities(demo_world) -> None:  #
 
 async def test_recommendations_are_explained_and_ranked(demo_world) -> None:  # type: ignore[no-untyped-def]
     async with session_scope() as s:
-        demo = await s.scalar(select(User).where(User.email == "demo@mulmit.dev"))
+        demo = await s.scalar(select(User).where(User.email == "demo@example.com"))
         assert demo is not None
         recs = (
             await s.scalars(
@@ -71,8 +71,8 @@ async def test_backtest_measures_lead_time_and_conversion(demo_world) -> None:  
 
 
 async def test_reprocessing_a_document_is_idempotent(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
-    from mulmit.db.models import Document
-    from mulmit.pipeline.process import process_document
+    from app.db.models import Document
+    from app.pipeline.process import process_document
 
     async with session_scope() as s:
         doc = await s.scalar(
@@ -95,9 +95,9 @@ async def test_job_cancelled_by_shutdown_is_recorded_as_retrying(demo_world) -> 
 
     from sqlalchemy import select
 
-    from mulmit.db.models import JobRun
-    from mulmit.db.session import session_scope
-    from mulmit.worker.tasks import tracked
+    from app.db.models import JobRun
+    from app.db.session import session_scope
+    from app.worker.tasks import tracked
 
     started = asyncio.Event()
 

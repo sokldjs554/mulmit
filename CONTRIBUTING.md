@@ -19,7 +19,7 @@ docs(adr): 0004 postgres-only search
 
 ## PR 체크리스트
 - [ ] 로컬에서 `make lint test` 통과
-- [ ] 파이프라인·프롬프트·파서·랭킹 변경이면 `mulmit eval all` 전후 수치 첨부
+- [ ] 파이프라인·프롬프트·파서·랭킹 변경이면 `manage eval all` 전후 수치 첨부
 - [ ] API 스키마 변경이면 `make gen-api` 결과 커밋
 - [ ] 마이그레이션이 있으면 직전 버전 코드와 호환(확장 → 배포 → 축소)
 - [ ] 되돌리기 어려운 결정이면 `docs/adr/`에 ADR 추가

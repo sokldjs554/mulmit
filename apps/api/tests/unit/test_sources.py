@@ -6,10 +6,10 @@ from datetime import date
 import httpx
 import pytest
 
-from mulmit.sources.base import FetchWindow
-from mulmit.sources.g2b import G2BAdapter, map_item
-from mulmit.sources.http import FatalSourceError, ResilientClient, TransientSourceError
-from mulmit.sources.resilience import (
+from app.sources.base import FetchWindow
+from app.sources.g2b import G2BAdapter, map_item
+from app.sources.http import FatalSourceError, ResilientClient, TransientSourceError
+from app.sources.resilience import (
     CircuitOpenError,
     MemoryBreaker,
     MemoryLimiter,

@@ -164,7 +164,7 @@ export function ThemeToggle() {
     const next = theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
     try {
-      localStorage.setItem("mulmit-theme", next);
+      localStorage.setItem("theme", next);
     } catch {
       /* private mode: the toggle still works for this page view */
     }

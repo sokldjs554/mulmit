@@ -23,19 +23,19 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: mulmit
-          POSTGRES_PASSWORD: mulmit
-          POSTGRES_DB: mulmit
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U mulmit" --health-interval 3s --health-timeout 3s --health-retries 20
+          --health-cmd "pg_isready -U app" --health-interval 3s --health-timeout 3s --health-retries 20
       redis:
         image: redis:7-alpine
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping" --health-interval 3s --health-timeout 3s --health-retries 20
     env:
-      MULMIT_LOG_JSON: "false"
+      APP_LOG_JSON: "false"
     steps:
       - uses: actions/checkout@v4
       - name: OCR engine and Korean fonts
@@ -53,20 +53,20 @@ jobs:
       - name: mypy (strict)
         run: uv run mypy
       - name: pytest (unit + integration against PostgreSQL/Redis)
-        run: uv run pytest --cov=mulmit --cov-report=term-missing:skip-covered --cov-report=xml
+        run: uv run pytest --cov=app --cov-report=term-missing:skip-covered --cov-report=xml
       - name: OpenAPI schema matches the committed copy used by the web app
         run: |
-          uv run mulmit openapi > "$RUNNER_TEMP/openapi.json"
+          uv run manage openapi > "$RUNNER_TEMP/openapi.json"
           diff -u ../web/openapi.json "$RUNNER_TEMP/openapi.json" || {
             echo "::error::apps/web/openapi.json is stale. Run 'make gen-api' and commit the result."; exit 1; }
       - name: Demo pipeline end to end
         run: |
-          uv run mulmit db upgrade
-          uv run mulmit seed --anchor 2026-09-25
-          uv run mulmit demo run
+          uv run manage db upgrade
+          uv run manage seed --anchor 2026-09-25
+          uv run manage demo run
       - name: Quality gate on the synthetic ground truth
         run: |
-          uv run mulmit eval all --report "$RUNNER_TEMP/evaluation.md" > "$RUNNER_TEMP/eval.json"
+          uv run manage eval all --report "$RUNNER_TEMP/evaluation.md" > "$RUNNER_TEMP/eval.json"
           jq -e '
             .extraction.precision >= 0.95 and .extraction.recall >= 0.95 and
             .linking.pairwise.precision >= 0.95 and .linking.pairwise.recall >= 0.95 and
@@ -140,6 +140,6 @@ jobs:
         with:
           context: apps/${{ matrix.app }}
           push: false
-          tags: mulmit-${{ matrix.app }}:ci
+          tags: app-${{ matrix.app }}:ci
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}

@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, ErrorNote, Field, Input } from "@/components/ui/primitives";
 import { useLogin } from "@/lib/api/hooks";
 
-const DEMO = { email: "demo@mulmit.dev", password: "mulmit-demo-1234" };
-const ADMIN = { email: "admin@mulmit.dev", password: "mulmit-admin-1234" };
+const DEMO = { email: "demo@example.com", password: "demo-pass-1234" };
+const ADMIN = { email: "admin@example.com", password: "admin-pass-1234" };
 
 function LoginForm() {
   const router = useRouter();

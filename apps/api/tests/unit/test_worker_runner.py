@@ -1,6 +1,6 @@
 import asyncio
 
-from mulmit.worker.runner import STARTUP_GRACE_SECONDS, is_healthy, serve_health
+from app.worker.runner import STARTUP_GRACE_SECONDS, is_healthy, serve_health
 
 
 class FakePool:

@@ -1,4 +1,4 @@
-# 평가 결과 (자동 생성: `mulmit eval all --report`)
+# 평가 결과 (자동 생성: `manage eval all --report`)
 
 > 합성 세계(synthetic world) 결과는 파이프라인이 설계대로 동작하는지 보여줄 뿐, 실제 데이터에서의
 > 정확도를 주장하지 않습니다. 실제 문장에 가까운 수기 작성 세트(realistic)를 따로 둔 이유입니다.

@@ -9,8 +9,8 @@ from alembic import context
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from mulmit.db.models import Base
-from mulmit.settings import get_settings
+from app.db.models import Base
+from app.settings import get_settings
 
 config = context.config
 if config.config_file_name is not None:

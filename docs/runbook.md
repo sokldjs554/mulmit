@@ -17,7 +17,7 @@
 **LLM 비용이 일 한도에 닿음 / 강등(degraded) 비율 상승**
 1. *LLM 비용* 화면에서 작업·모델·프롬프트 버전별 비용과 캐시 적중률을 확인합니다. 캐시 적중률이 갑자기 떨어졌다면 시스템 프롬프트가 바뀌어 캐시 접두가 깨진 것입니다.
 2. 트리아지 통과율이 올랐는지 확인합니다(새 수집원이 절차 발언이 많은 회의록을 대량으로 넣는 경우).
-3. 필요하면 `MULMIT_LLM_DAILY_BUDGET_USD`를 올립니다. 한도 초과 동안의 문서는 규칙 기반 추출기로 처리되어 `degraded:budget_exceeded` 사유로 검토 대기열에 들어가 있습니다.
+3. 필요하면 `APP_LLM_DAILY_BUDGET_USD`를 올립니다. 한도 초과 동안의 문서는 규칙 기반 추출기로 처리되어 `degraded:budget_exceeded` 사유로 검토 대기열에 들어가 있습니다.
 
 **검토 대기열이 쌓임**
 - 사유별로 봅니다. `institution_unresolved`가 대부분이면 기관 사전(`domain/data/institutions.csv`)에 별칭을 추가합니다. `year_unverified`가 대부분이면 시점 해석기(`domain/timing.py`)에 표현을 추가하고 수기 평가 세트에 사례를 넣습니다.
@@ -48,14 +48,14 @@
 ## 배포·롤백
 
 - 배포 순서: 이미지 → 마이그레이션 Job → 워커 → API → 웹. 마이그레이션은 **확장 → 코드 배포 → 축소** 두 단계로 나눠, 직전 리비전이 새 스키마에서도 돌게 작성합니다.
-- 롤백: `gcloud run services update-traffic mulmit-api --to-revisions <이전 리비전>=100` (웹·워커도 동일). 스키마는 되돌리지 않습니다.
+- 롤백: `gcloud run services update-traffic app-api --to-revisions <이전 리비전>=100` (웹·워커도 동일). 스키마는 되돌리지 않습니다.
 - DB 복구: Cloud SQL PITR(7일)로 새 인스턴스를 만든 뒤 `database-url` 시크릿의 새 버전을 추가하고 서비스를 재배포합니다.
 
 ## 비밀값 교체
 
 ```bash
 printf '%s' "$NEW_VALUE" | gcloud secrets versions add <secret-id> --data-file=-
-gcloud run services update mulmit-api --region asia-northeast3 --update-labels rotated=$(date +%s)
+gcloud run services update app-api --region asia-northeast3 --update-labels rotated=$(date +%s)
 ```
 
-`MULMIT_BILLING_KEY_ENCRYPTION_KEY`는 교체 전에 저장된 빌링키를 새 키로 재암호화해야 합니다(`MultiFernet` 이행 스크립트가 필요, 아직 없음).
+`APP_BILLING_KEY_ENCRYPTION_KEY`는 교체 전에 저장된 빌링키를 새 키로 재암호화해야 합니다(`MultiFernet` 이행 스크립트가 필요, 아직 없음).

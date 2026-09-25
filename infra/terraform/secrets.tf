@@ -7,10 +7,10 @@ locals {
     "billing-key-encryption-key" = replace(replace(random_bytes.fernet.base64, "+", "-"), "/", "_")
   }
   generated_env = {
-    MULMIT_DATABASE_URL               = "database-url"
-    MULMIT_REDIS_URL                  = "redis-url"
-    MULMIT_JWT_SECRET                 = "jwt-secret"
-    MULMIT_BILLING_KEY_ENCRYPTION_KEY = "billing-key-encryption-key"
+    APP_DATABASE_URL               = "database-url"
+    APP_REDIS_URL                  = "redis-url"
+    APP_JWT_SECRET                 = "jwt-secret"
+    APP_BILLING_KEY_ENCRYPTION_KEY = "billing-key-encryption-key"
   }
   # Created empty; the operator adds versions (see var.mounted_external_secrets).
   external_secrets = toset([

@@ -1,5 +1,5 @@
 {
-  "name": "@mulmit/web",
+  "name": "web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,7 @@
     "lint": "eslint --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "gen:api": "cd ../api && uv run mulmit openapi > ../web/openapi.json && cd ../web && openapi-typescript openapi.json -o src/lib/api/schema.d.ts"
+    "gen:api": "cd ../api && uv run manage openapi > ../web/openapi.json && cd ../web && openapi-typescript openapi.json -o src/lib/api/schema.d.ts"
   },
   "dependencies": {
     "@sentry/browser": "^11.0.0",

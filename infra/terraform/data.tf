@@ -1,7 +1,7 @@
 # PostgreSQL 16 with pgvector and pg_trgm (both supported extensions on Cloud SQL; the Alembic
 # migration creates them as the cloudsqlsuperuser-member app user).
 resource "google_sql_database_instance" "pg" {
-  name                = "mulmit-pg16"
+  name                = "app-pg16"
   database_version    = "POSTGRES_16"
   region              = var.region
   deletion_protection = true
@@ -38,7 +38,7 @@ resource "google_sql_database_instance" "pg" {
 }
 
 resource "google_sql_database" "app" {
-  name     = "mulmit"
+  name     = "app"
   instance = google_sql_database_instance.pg.name
 }
 
@@ -48,13 +48,13 @@ resource "random_password" "db" {
 }
 
 resource "google_sql_user" "app" {
-  name     = "mulmit"
+  name     = "app"
   instance = google_sql_database_instance.pg.name
   password = random_password.db.result
 }
 
 resource "google_redis_instance" "queue" {
-  name               = "mulmit-redis"
+  name               = "app-redis"
   region             = var.region
   tier               = "BASIC"
   memory_size_gb     = var.redis_memory_gb

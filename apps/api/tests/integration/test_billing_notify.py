@@ -5,18 +5,18 @@ from typing import Any
 import pytest
 from sqlalchemy import select
 
-from mulmit.billing.ledger import InsufficientCreditsError, apply_credits
-from mulmit.billing.service import (
+from app.billing.ledger import InsufficientCreditsError, apply_credits
+from app.billing.service import (
     build_payment_provider,
     change_plan,
     ensure_subscription,
     register_card,
     renew_due,
 )
-from mulmit.db.models import AlertChannel, AlertRule, Notification, Organization, Subscription
-from mulmit.db.session import session_scope
-from mulmit.notify.channels import PermanentDeliveryError
-from mulmit.notify.dispatch import deliver_pending, enqueue_alerts
+from app.db.models import AlertChannel, AlertRule, Notification, Organization, Subscription
+from app.db.session import session_scope
+from app.notify.channels import PermanentDeliveryError
+from app.notify.dispatch import deliver_pending, enqueue_alerts
 
 
 async def _new_org(name: str, credits: int = 0) -> int:
@@ -83,7 +83,7 @@ async def test_renewal_dunning_then_downgrade(demo_world, runtime) -> None:  # t
         await change_plan(s, settings, provider, org, "pro", request_id="dunning-1", now=now)
         # The card starts failing: swap in a billing key the fake provider declines.
         replacement = await provider.issue_billing_key("decline-card", sub.customer_key)
-        from mulmit.billing.service import _fernet
+        from app.billing.service import _fernet
 
         sub.billing_key_enc = _fernet(settings).encrypt(replacement.billing_key.encode()).decode()
 
@@ -112,10 +112,10 @@ class RecordingChannel:
 
 
 async def test_digest_is_created_once_and_respects_quiet_hours(demo_world) -> None:  # type: ignore[no-untyped-def]
-    from mulmit.db.models import User
+    from app.db.models import User
 
     async with session_scope() as s:
-        demo = await s.scalar(select(User).where(User.email == "demo@mulmit.dev"))
+        demo = await s.scalar(select(User).where(User.email == "demo@example.com"))
         assert demo is not None
         org_id = demo.org_id
         rule = await s.get(AlertRule, org_id)
@@ -142,7 +142,7 @@ async def test_digest_is_created_once_and_respects_quiet_hours(demo_world) -> No
         )
     assert stats["sent"] >= 1
     target, payload = channel.sent[0]
-    assert target == "demo@mulmit.dev" and payload["items"]
+    assert target == "demo@example.com" and payload["items"]
 
 
 async def test_permanent_failure_disables_channel(demo_world) -> None:  # type: ignore[no-untyped-def]

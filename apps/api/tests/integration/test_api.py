@@ -3,8 +3,8 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 
-from mulmit.api.app import create_app
-from mulmit.settings import get_settings
+from app.api.app import create_app
+from app.settings import get_settings
 
 
 @pytest.fixture
@@ -60,9 +60,9 @@ async def test_signup_profile_feed_detail_brief(client: httpx.AsyncClient) -> No
     # The worker would refresh recommendations; do it inline for the test.
     from sqlalchemy import select
 
-    from mulmit.db.models import User
-    from mulmit.db.session import session_scope
-    from mulmit.pipeline.recommend import refresh_recommendations
+    from app.db.models import User
+    from app.db.session import session_scope
+    from app.pipeline.recommend import refresh_recommendations
 
     async with session_scope() as s:
         user = await s.scalar(select(User).where(User.email == "new@vendor.kr"))
@@ -139,9 +139,9 @@ async def test_billing_card_plan_and_credit_pack(client: httpx.AsyncClient) -> N
 
 
 async def test_admin_requires_staff(client: httpx.AsyncClient) -> None:
-    await _login(client, "demo@mulmit.dev", "mulmit-demo-1234")
+    await _login(client, "demo@example.com", "demo-pass-1234")
     assert (await client.get("/api/admin/overview")).status_code == 403
-    await _login(client, "admin@mulmit.dev", "mulmit-admin-1234")
+    await _login(client, "admin@example.com", "admin-pass-1234")
     overview = await client.get("/api/admin/overview")
     assert overview.status_code == 200
     body = overview.json()
@@ -155,7 +155,7 @@ async def test_login_is_throttled(client: httpx.AsyncClient) -> None:
     codes = [
         (
             await client.post(
-                "/api/auth/login", json={"email": "demo@mulmit.dev", "password": "wrong"}
+                "/api/auth/login", json={"email": "demo@example.com", "password": "wrong"}
             )
         ).status_code
         for _ in range(7)

@@ -1,6 +1,6 @@
 import pytest
 
-from mulmit.domain.krw import (
+from app.domain.krw import (
     amounts_agree,
     detect_table_unit,
     find_amounts,

@@ -5,17 +5,17 @@ from datetime import UTC, date, datetime
 import httpx
 import pytest
 
-from mulmit.billing.service import add_month
-from mulmit.billing.toss import PaymentDeclinedError, PaymentUnavailableError, TossPaymentsClient
-from mulmit.db.models import CompanyProfile, Opportunity
-from mulmit.demo.synth import build_world, josa, spoken_krw
-from mulmit.notify.channels import PermanentDeliveryError, SlackChannel, TransientDeliveryError
-from mulmit.notify.dispatch import _quiet_until
-from mulmit.notify.render import render_email, render_kakao_variables, render_slack
-from mulmit.pipeline.link import terms_conflict, title_similarity
-from mulmit.pipeline.process import canonical_title
-from mulmit.pipeline.recommend import score_opportunity
-from mulmit.pipeline.triage import triage_chunk
+from app.billing.service import add_month
+from app.billing.toss import PaymentDeclinedError, PaymentUnavailableError, TossPaymentsClient
+from app.db.models import CompanyProfile, Opportunity
+from app.demo.synth import build_world, josa, spoken_krw
+from app.notify.channels import PermanentDeliveryError, SlackChannel, TransientDeliveryError
+from app.notify.dispatch import _quiet_until
+from app.notify.render import render_email, render_kakao_variables, render_slack
+from app.pipeline.link import terms_conflict, title_similarity
+from app.pipeline.process import canonical_title
+from app.pipeline.recommend import score_opportunity
+from app.pipeline.triage import triage_chunk
 
 PAYLOAD = {
     "org_name": "데모",

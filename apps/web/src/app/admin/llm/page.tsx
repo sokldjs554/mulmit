@@ -85,7 +85,7 @@ export default function LlmPage() {
           </div>
           {data.extractor_mode === "heuristic" ? (
             <p className="rounded-lg border border-line bg-surface px-4 py-3 text-[13px] text-ink-2">
-              이 환경에는 <code className="rounded bg-surface-2 px-1">MULMIT_LLM_PROVIDER=anthropic</code>이 설정되지 않아 규칙 기반 추출기로
+              이 환경에는 <code className="rounded bg-surface-2 px-1">APP_LLM_PROVIDER=anthropic</code>이 설정되지 않아 규칙 기반 추출기로
               동작 중입니다. 키를 설정하면 같은 화면에서 모델·작업별 비용과 캐시 효과가 집계됩니다.
             </p>
           ) : null}

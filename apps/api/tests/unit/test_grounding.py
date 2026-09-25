@@ -2,8 +2,8 @@ from datetime import date
 
 import pytest
 
-from mulmit.domain.grounding import locate_quote, verify_extraction
-from mulmit.domain.timing import resolve_timing
+from app.domain.grounding import locate_quote, verify_extraction
+from app.domain.timing import resolve_timing
 
 SOURCE = """○위원 박지훈  버스정류장에 냉난방이 되는 스마트쉘터를 더 늘릴 계획이 있습니까?
 ○스마트도시과장 이정민  네, 위원님. 현재 12개소를 운영 중이고, 내년도 본예산에

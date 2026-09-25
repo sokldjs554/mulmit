@@ -1,18 +1,18 @@
 # Runtime identity for the API, worker and migration job.
 resource "google_service_account" "runtime" {
-  account_id   = "mulmit-runtime"
-  display_name = "mulmit API / worker / migrations"
+  account_id   = "app-runtime"
+  display_name = "API / worker / migrations"
 }
 
 # The web server only proxies to the API; it needs no Google API permissions.
 resource "google_service_account" "web" {
-  account_id   = "mulmit-web"
-  display_name = "mulmit web (Next.js)"
+  account_id   = "app-web"
+  display_name = "Web (Next.js)"
 }
 
 # GitHub Actions deploys as this account through Workload Identity Federation (wif.tf).
 resource "google_service_account" "deployer" {
-  account_id   = "mulmit-deployer"
+  account_id   = "app-deployer"
   display_name = "GitHub Actions deployer"
 }
 

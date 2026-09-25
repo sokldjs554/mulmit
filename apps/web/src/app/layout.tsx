@@ -17,7 +17,7 @@ export const viewport: Viewport = {
 };
 
 // Applied before first paint so a stored theme choice never flashes the other theme.
-const themeScript = `try{var t=localStorage.getItem("mulmit-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+const themeScript = `try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

@@ -28,17 +28,17 @@ down: ## Stop the stack (keeps volumes)
 
 .PHONY: demo
 demo: ## Migrate, seed the synthetic world and run the full pipeline (local Python)
-	cd $(API) && uv run mulmit db upgrade
-	cd $(API) && uv run mulmit seed --anchor $(ANCHOR) --scale $(SCALE)
-	cd $(API) && uv run mulmit demo run
+	cd $(API) && uv run manage db upgrade
+	cd $(API) && uv run manage seed --anchor $(ANCHOR) --scale $(SCALE)
+	cd $(API) && uv run manage demo run
 
 .PHONY: api
 api: ## Run the API with reload on :8000
-	cd $(API) && MULMIT_LOG_JSON=false uv run uvicorn mulmit.api.app:create_app --factory --reload --port 8000
+	cd $(API) && APP_LOG_JSON=false uv run uvicorn app.api.app:create_app --factory --reload --port 8000
 
 .PHONY: worker
 worker: ## Run the arq worker (cron + queue)
-	cd $(API) && MULMIT_LOG_JSON=false uv run mulmit worker
+	cd $(API) && APP_LOG_JSON=false uv run manage worker
 
 .PHONY: web
 web: ## Run the Next.js dev server on :3000
@@ -56,7 +56,7 @@ test: ## API tests (needs `make infra`) and web unit tests
 
 .PHONY: eval
 eval: ## Evaluate extraction/linking/OCR against ground truth and write docs/evaluation.md
-	cd $(API) && uv run mulmit eval all --record --report ../../docs/evaluation.md
+	cd $(API) && uv run manage eval all --record --report ../../docs/evaluation.md
 
 .PHONY: gen-api
 gen-api: ## Regenerate the web app's OpenAPI types from the FastAPI schema

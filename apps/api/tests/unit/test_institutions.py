@@ -1,6 +1,6 @@
 import pytest
 
-from mulmit.domain.institutions import load_registry_csv, parse_name
+from app.domain.institutions import load_registry_csv, parse_name
 
 
 @pytest.fixture(scope="module")
