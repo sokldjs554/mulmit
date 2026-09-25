@@ -8,14 +8,17 @@
 
 | 쿼리 | 전 | 후 | 전: 행 / 재현율 | 후: 행 / 재현율 |
 |---|---:|---:|---|---|
-| 추천 후보: 회사 소개와 가까운 진행 중 공고 300건 (벡터) | 1.4 ms | 3.9 ms | 13 / 4% | 300 / 100% |
-| 추천 후보: 관심 키워드가 제목·키워드에 있는 진행 중 공고 | 3.6 ms | 3.2 ms | 300 | 300 |
-| 기회 연결: 처음 보는 발주계획번호로 기존 기회 찾기 (없음) | 87.5 ms | 0.02 ms | 0 | 0 |
-| 기회 연결: 이미 있는 발주계획번호로 기존 기회 찾기 | 0.05 ms | 0.02 ms | 1 | 1 |
-| 기회 연결: 같은 기관·기간의 가까운 기회 12건 (벡터) | 1.0 ms | 1.1 ms | 12 / 100% | 12 / 100% |
-| 고객 피드 첫 페이지 (점수순 21건) | 0.48 ms | 0.46 ms | 21 | 21 |
-| 운영 개요: 파이프라인 퍼널 집계 (5개 COUNT) | 173.4 ms | 124.0 ms | 1 | 1 |
-| 배치: 처리 대기 문서 200건 (10분마다) | 0.19 ms | 0.17 ms | 200 | 200 |
+| 추천 후보: 회사 소개와 가까운 진행 중 공고 300건 (벡터) | 1.3 ms | 4.5 ms | 13 / 4% | 300 / 100% |
+| 추천 후보: 관심 키워드가 제목·키워드에 있는 진행 중 공고 | 5.8 ms | 7.6 ms | 300 | 300 |
+| 기회 연결: 처음 보는 발주계획번호로 기존 기회 찾기 (없음) | 120.0 ms | 0.03 ms | 0 | 0 |
+| 기회 연결: 이미 있는 발주계획번호로 기존 기회 찾기 | 0.08 ms | 0.03 ms | 1 | 1 |
+| 기회 연결: 같은 기관·기간의 가까운 기회 12건 (벡터) | 1.3 ms | 1.4 ms | 12 / 100% | 12 / 100% |
+| 고객 피드 첫 페이지 (점수순 21건) | 0.44 ms | 0.45 ms | 21 | 21 |
+| 고객 피드 첫 페이지 (입찰이 가까운 순 21건) | 0.51 ms | 0.48 ms | 21 | 21 |
+| 고객 피드 첫 페이지 (새 소식 순 21건) | 0.45 ms | 0.45 ms | 21 | 21 |
+| 고객 피드 단계별 건수 (칩·머리말, GROUP BY) | 0.45 ms | 0.47 ms | 5 | 5 |
+| 운영 개요: 파이프라인 퍼널 집계 (5개 COUNT) | 228.8 ms | 148.1 ms | 1 | 1 |
+| 배치: 처리 대기 문서 200건 (10분마다) | 0.28 ms | 0.21 ms | 200 | 200 |
 
 ## 실행 계획
 
@@ -49,6 +52,21 @@
 - 전: `Limit → Incremental Sort → Nested Loop → Index Scan (ix_recommendations_org_score) → Index Scan (opportunities_pkey)`
 - 후: `Limit → Incremental Sort → Nested Loop → Index Scan (ix_recommendations_org_score) → Index Scan (opportunities_pkey)`
 
+### 고객 피드 첫 페이지 (입찰이 가까운 순 21건)
+
+- 전: `Limit → Sort → Nested Loop → Bitmap Heap Scan → Bitmap Index Scan (ix_recommendations_org_score) → Index Scan (opportunities_pkey)`
+- 후: `Limit → Sort → Nested Loop → Bitmap Heap Scan → Bitmap Index Scan (ix_recommendations_org_score) → Index Scan (opportunities_pkey)`
+
+### 고객 피드 첫 페이지 (새 소식 순 21건)
+
+- 전: `Limit → Sort → Nested Loop → Bitmap Heap Scan → Bitmap Index Scan (ix_recommendations_org_score) → Index Scan (opportunities_pkey)`
+- 후: `Limit → Sort → Nested Loop → Bitmap Heap Scan → Bitmap Index Scan (ix_recommendations_org_score) → Index Scan (opportunities_pkey)`
+
+### 고객 피드 단계별 건수 (칩·머리말, GROUP BY)
+
+- 전: `Aggregate → Sort → Nested Loop → Bitmap Heap Scan → Bitmap Index Scan (ix_recommendations_org_score) → Index Scan (opportunities_pkey)`
+- 후: `Aggregate → Sort → Nested Loop → Bitmap Heap Scan → Bitmap Index Scan (ix_recommendations_org_score) → Index Scan (opportunities_pkey)`
+
 ### 운영 개요: 파이프라인 퍼널 집계 (5개 COUNT)
 
 - 전: `Result → Aggregate → Index Only Scan (ix_documents_type_published) → Gather → Index Only Scan (document_chunks_pkey) → Seq Scan (document_chunks) → Index Only Scan (ix_signals_verdict) → Index Only Scan (ix_opportunities_institution)`
@@ -59,4 +77,4 @@
 - 전: `Limit → Sort → Index Scan (ix_documents_pending)`
 - 후: `Limit → Sort → Index Scan (ix_documents_pending)`
 
-마이그레이션 0002 적용 시간(데이터가 있는 상태): 4.3초
+마이그레이션 0002 적용 시간(데이터가 있는 상태): 6.2초
