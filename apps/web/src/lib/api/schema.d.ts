@@ -1062,6 +1062,8 @@ export interface components {
             feedback: string | null;
             /** Lead Days */
             lead_days: number | null;
+            /** Head Start Days */
+            head_start_days?: number | null;
         };
         /** OpportunityDetail */
         OpportunityDetail: {
@@ -1112,6 +1114,8 @@ export interface components {
             feedback: string | null;
             /** Lead Days */
             lead_days: number | null;
+            /** Head Start Days */
+            head_start_days?: number | null;
             /** Keywords */
             keywords: string[];
             /** Best Commitment */

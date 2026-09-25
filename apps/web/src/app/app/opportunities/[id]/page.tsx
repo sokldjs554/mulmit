@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 
 import { BarList } from "@/components/charts/bar-list";
 import { BudgetLine, StatTile } from "@/components/charts/budget-line";
+import { HeadStart } from "@/components/opportunity/head-start";
 import { SignalTimeline } from "@/components/opportunity/signal-timeline";
 import { StageRail } from "@/components/opportunity/stage-rail";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import { Badge, Card, CardHeader, ErrorNote, Skeleton } from "@/components/ui/pr
 import { useToast } from "@/components/ui/toast";
 import { ApiError, type Schemas } from "@/lib/api/client";
 import { useCreateBrief, useFeedback, useMe, useOpportunity } from "@/lib/api/hooks";
-import { formatDateTime, formatKRW, formatPercent, formatWindow, leadLabel } from "@/lib/format";
+import { formatDate, formatDateTime, formatKRW, formatPercent, formatWindow, leadLabel } from "@/lib/format";
 import { STATUS_LABEL } from "@/lib/utils";
 
 const FEATURE_LABEL: Record<string, string> = {
@@ -160,9 +161,19 @@ export default function OpportunityPage() {
         </p>
       </header>
 
+      <HeadStart detail={data} />
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="추정 예산" value={formatKRW(data.est_budget_krw)} sub="가장 최근 단계 기준" />
-        <StatTile label="입찰 예상 시기" value={formatWindow(data.bid_window_start, data.bid_window_end)} sub={lead ? `입찰 ${lead}` : undefined} />
+        {data.bid_published_at ? (
+          <StatTile label="입찰공고" value={formatDate(data.bid_published_at)} sub="나라장터에 게시된 날" />
+        ) : (
+          <StatTile
+            label="입찰 예상 시기"
+            value={formatWindow(data.bid_window_start, data.bid_window_end)}
+            sub={lead ? `입찰 ${lead}` : undefined}
+          />
+        )}
         <StatTile label="공고 전환 확률" value={formatPercent(data.conversion_prob)} sub="백테스트로 보정" />
         <StatTile label="우리 회사 적합도" value={data.score !== null ? `${Math.round(data.score * 100)}점` : "–"} sub={`신호 ${data.signal_count}건`} />
       </div>

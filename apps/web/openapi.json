@@ -2819,6 +2819,17 @@
               }
             ],
             "title": "Lead Days"
+          },
+          "head_start_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Start Days"
           }
         },
         "type": "object",
@@ -2995,6 +3006,17 @@
               }
             ],
             "title": "Lead Days"
+          },
+          "head_start_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Start Days"
           },
           "keywords": {
             "items": {

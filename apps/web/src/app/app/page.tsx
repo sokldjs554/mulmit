@@ -17,7 +17,8 @@ export default function FeedPage() {
   const [query, setQuery] = useState("");
   const [stages, setStages] = useState<string[]>([]);
   const [category, setCategory] = useState("");
-  const [status, setStatus] = useState<StatusKey>("all");
+  // Pre-tender demand is the point of the product, so that is what the feed opens on.
+  const [status, setStatus] = useState<StatusKey>("open");
   const deferredQuery = useDeferredValue(query);
   const categories = useCategories();
 
@@ -75,9 +76,9 @@ export default function FeedPage() {
           value={status}
           onChange={setStatus}
           options={[
-            { key: "all", label: "전체" },
             { key: "open", label: "공고 전" },
             { key: "bid_open", label: "입찰 진행" },
+            { key: "all", label: "전체" },
           ]}
         />
       </div>

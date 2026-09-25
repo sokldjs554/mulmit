@@ -111,6 +111,7 @@ class OpportunityCard(BaseModel):
     reasons: list[str]
     feedback: str | None
     lead_days: int | None
+    head_start_days: int | None = None  # first public signal → 입찰공고 (actual or forecast)
 
 
 class FeedPage(BaseModel):
