@@ -103,7 +103,7 @@ async def _charge(
     kind: str,
 ) -> Payment:
     if not sub.billing_key_enc:
-        raise BillingError("등록된 결제수단이 없습니다")
+        raise BillingError("등록된 카드가 없어요. 카드부터 등록해 주세요")
     existing = await session.scalar(select(Payment).where(Payment.order_id == order_id))
     if existing is not None and existing.status == "paid":
         return existing

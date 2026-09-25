@@ -59,7 +59,7 @@ function UserMenu() {
       <Link
         href="/app/billing"
         className="hidden items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 text-[12px] text-ink-2 hover:bg-surface-2 sm:inline-flex"
-        title="Deep Brief에 쓰는 크레딧"
+        title="영업 브리핑을 만들 때 쓰는 크레딧"
       >
         <CreditCard className="size-3.5" aria-hidden />
         크레딧 <span className="tabular font-semibold text-ink">{me.data.org.credit_balance}</span>
@@ -157,7 +157,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <div className="hidden w-56 shrink-0 border-r border-line bg-surface md:block">
       <aside className="sticky top-0 flex h-dvh flex-col px-3 py-4">
         <Logo className="px-2" />
-        <p className="mt-1 px-2 text-[11px] font-medium tracking-wide text-muted uppercase">Operator console</p>
+        <p className="mt-1 px-2 text-[11px] font-medium tracking-wide text-muted uppercase">운영 콘솔</p>
         <nav className="mt-6 space-y-0.5" aria-label="운영 메뉴">
           {ADMIN_NAV.map(({ href, label, icon: Icon, exact }) => {
             const active = exact ? pathname === href : pathname.startsWith(href);

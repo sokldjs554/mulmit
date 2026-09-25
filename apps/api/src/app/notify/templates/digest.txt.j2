@@ -1,14 +1,19 @@
 [발주 예측] {{ headline }}
-입찰공고보다 먼저 포착한 공공 수요 {{ items|length }}건
+{% if items %}
+{{ org_name }}에 맞을 만한 사업을 골랐어요. 근거가 된 원문 문장도 같이 붙여 뒀어요.
+{% else %}
+{{ test_note }}
+{% endif %}
 
 {% for item in items -%}
 ■ {{ item.title }} ({{ item.institution }})
-  {{ item.stage_label }}{% if item.budget %} · 예산 {{ item.budget }}{% endif %} · 입찰 예상 {{ item.window }} · 적합도 {{ item.score_pct }}%
+  {{ item.stage_label }}{% if item.budget %} · {{ item.budget }}{% endif %} · {{ when(item) }} · 적합도 {{ item.score_pct }}점
 {% if item.evidence %}  「{{ item.evidence }}」
+{% elif item.evidence_note %}  {{ item.evidence_note }}
 {% endif %}  {{ item.url }}
 
 {% endfor -%}
-{% if more %}외 {{ more }}건 더 보기: {{ feed_url }}
+{% if more %}나머지 {{ more }}건도 보기: {{ feed_url }}
 
 {% endif -%}
-알림 설정: {{ settings_url }}
+받는 시간이나 채널 바꾸기: {{ settings_url }}

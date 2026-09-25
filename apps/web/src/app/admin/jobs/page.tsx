@@ -27,7 +27,7 @@ export default function JobsPage() {
     <div className="space-y-6">
       <PageHeader
         title="작업 로그"
-        description="모든 arq 작업은 시작·종료·오류가 기록됩니다. 일시적 오류는 지수 백오프로 자동 재시도되고, 최종 실패만 여기서 수동 재실행합니다."
+        description="arq 작업마다 시작, 끝, 오류를 남겨요. 일시적인 오류는 간격을 늘려 가며 알아서 다시 시도하고, 끝내 실패한 것만 여기서 직접 다시 돌려요."
         action={
           <Segmented<Filter>
             ariaLabel="상태 필터"
@@ -46,7 +46,7 @@ export default function JobsPage() {
         {jobs.isLoading ? (
           <Skeleton className="m-5 h-48" />
         ) : jobs.data?.length === 0 ? (
-          <EmptyState title="기록된 작업이 없습니다" />
+          <EmptyState title="기록된 작업이 없어요" />
         ) : (
           <table className="w-full min-w-[820px] text-[13px]">
             <thead>
@@ -89,7 +89,7 @@ export default function JobsPage() {
                         size="sm"
                         variant="secondary"
                         loading={retry.isPending && retry.variables === j.id}
-                        onClick={() => retry.mutate(j.id, { onSuccess: () => toast("good", "다시 실행하도록 예약했습니다") })}
+                        onClick={() => retry.mutate(j.id, { onSuccess: () => toast("good", "다시 돌리도록 예약했어요") })}
                       >
                         <RotateCcw className="size-3.5" aria-hidden /> 재실행
                       </Button>

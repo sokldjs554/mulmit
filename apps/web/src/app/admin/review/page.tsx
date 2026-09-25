@@ -54,7 +54,7 @@ function ReviewCard({ item }: { item: Item }) {
     }
     decide.mutate(
       { id: item.id, body },
-      { onSuccess: () => toast("good", action === "reject" ? "기각했습니다" : "승인했습니다. 기회 연결을 다시 실행합니다.") },
+      { onSuccess: () => toast("good", action === "reject" ? "기각했어요" : "승인했어요. 사업 연결을 다시 돌릴게요.") },
     );
   };
 
@@ -96,7 +96,7 @@ function ReviewCard({ item }: { item: Item }) {
           </Select>
         </Field>
         {needsInstitution ? (
-          <Field label="수요 기관 지정" htmlFor={`i-${item.id}`} hint="동명 기관(예: 중구) 중 실제 기관을 고르세요.">
+          <Field label="수요 기관 지정" htmlFor={`i-${item.id}`} hint="이름이 같은 기관(예: 중구)이 여럿이에요. 실제 기관을 골라 주세요.">
             <Select id={`i-${item.id}`} value={institution} onChange={(e) => setInstitution(e.target.value)}>
               <option value="">선택</option>
               {institutions.data?.map((inst) => (
@@ -133,7 +133,7 @@ export default function ReviewPage() {
     <div className="space-y-6">
       <PageHeader
         title="검토 대기열"
-        description="검증기가 근거·금액·연도·기관을 확인하지 못한 신호입니다. 사람의 판단이 들어간 결과는 평가용 정답 세트로도 쌓입니다."
+        description="검증기가 근거, 금액, 연도, 기관 중 하나라도 확인하지 못한 신호예요. 여기서 사람이 판단한 결과는 평가용 정답으로도 쌓여요."
         action={
           <Segmented<Status>
             ariaLabel="검토 상태"
@@ -159,7 +159,7 @@ export default function ReviewPage() {
         </div>
       ) : (
         <Card>
-          <EmptyState icon={<ClipboardCheck className="size-8" aria-hidden />} title="검토할 신호가 없습니다" />
+          <EmptyState icon={<ClipboardCheck className="size-8" aria-hidden />} title="검토할 신호가 없어요" />
         </Card>
       )}
     </div>

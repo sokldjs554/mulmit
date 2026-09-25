@@ -43,7 +43,7 @@ async function proxy(request: NextRequest, ctx: RouteContext<"/api/[...path]">):
       signal: AbortSignal.timeout(60_000),
     });
   } catch {
-    return Response.json({ detail: "API 서버에 연결할 수 없습니다" }, { status: 502 });
+    return Response.json({ detail: "서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요." }, { status: 502 });
   }
 
   const responseHeaders = new Headers();

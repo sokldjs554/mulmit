@@ -38,13 +38,17 @@ async def put_profile(
     if plan.max_regions is not None and len(body.region_codes) > plan.max_regions:
         raise HTTPException(
             status.HTTP_402_PAYMENT_REQUIRED,
-            f"{plan.name} 플랜은 관심 지역을 {plan.max_regions}개까지 설정할 수 있습니다",
+            f"{plan.name} 플랜에서는 관심 지역을 {plan.max_regions}곳까지 고를 수 있어요",
         )
     if body.budget_min and body.budget_max and body.budget_min > body.budget_max:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "예산 범위가 올바르지 않습니다")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "최소 사업 규모가 최대 규모보다 커요"
+        )
     unknown = [c for c in body.categories if c not in Category._value2member_map_]
     if unknown:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"알 수 없는 분야: {unknown}")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, f"없는 분야예요: {', '.join(unknown)}"
+        )
     profile = await session.get(CompanyProfile, principal.org.id)
     if profile is None:
         profile = CompanyProfile(org_id=principal.org.id)

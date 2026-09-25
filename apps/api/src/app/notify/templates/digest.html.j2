@@ -5,25 +5,30 @@
     <tr><td style="padding:28px 28px 8px;">
       <div style="font-size:13px;color:#4e6b64;letter-spacing:.02em;">발주 예측 · {{ org_name }}</div>
       <h1 style="font-size:20px;margin:6px 0 4px;">{{ headline }}</h1>
-      <p style="margin:0;color:#4e6b64;font-size:14px;">입찰공고보다 먼저 포착한 공공 수요 {{ items|length }}건</p>
+      {% if items %}
+      <p style="margin:0;color:#4e6b64;font-size:14px;">{{ org_name }}에 맞을 만한 사업을 골랐어요. 근거가 된 원문 문장도 같이 붙여 뒀어요.</p>
+      {% else %}
+      <p style="margin:0;color:#4e6b64;font-size:14px;">{{ test_note }}</p>
+      {% endif %}
     </td></tr>
     {% for item in items %}
     <tr><td style="padding:16px 28px;border-top:1px solid #e3e7e2;">
       <div style="font-size:12px;color:#0f6e5c;font-weight:600;">{{ item.stage_label }} · {{ item.institution }}</div>
       <a href="{{ item.url }}" style="display:block;font-size:16px;font-weight:700;color:#1d2b28;text-decoration:none;margin:4px 0;">{{ item.title }}</a>
       <div style="font-size:13px;color:#4e6b64;">
-        {% if item.budget %}예산 {{ item.budget }} · {% endif %}입찰 예상 {{ item.window }} · 적합도 {{ item.score_pct }}%
+        {% if item.budget %}{{ item.budget }} · {% endif %}{{ when(item) }} · 적합도 {{ item.score_pct }}점
       </div>
-      {% if item.evidence %}<blockquote style="margin:8px 0 0;padding:8px 12px;background:#f4f5f2;border-left:3px solid #0f6e5c;font-size:13px;color:#33423e;">「{{ item.evidence }}」</blockquote>{% endif %}
+      {% if item.evidence %}<blockquote style="margin:8px 0 0;padding:8px 12px;background:#f4f5f2;border-left:3px solid #0f6e5c;font-size:13px;color:#33423e;">「{{ item.evidence }}」</blockquote>
+      {% elif item.evidence_note %}<div style="margin:8px 0 0;font-size:13px;color:#33423e;">{{ item.evidence_note }}</div>{% endif %}
     </td></tr>
     {% endfor %}
     {% if more %}
     <tr><td style="padding:12px 28px;border-top:1px solid #e3e7e2;font-size:14px;">
-      <a href="{{ feed_url }}" style="color:#0f6e5c;font-weight:600;">외 {{ more }}건 더 보기 →</a>
+      <a href="{{ feed_url }}" style="color:#0f6e5c;font-weight:600;">나머지 {{ more }}건도 보러 가기 →</a>
     </td></tr>
     {% endif %}
     <tr><td style="padding:20px 28px 28px;font-size:12px;color:#7a8c87;border-top:1px solid #e3e7e2;">
-      알림 설정은 <a href="{{ settings_url }}" style="color:#0f6e5c;">여기</a>에서 바꿀 수 있습니다.
+      받는 시간이나 채널은 <a href="{{ settings_url }}" style="color:#0f6e5c;">알림 설정</a>에서 바꿀 수 있어요.
     </td></tr>
   </table>
 </body>

@@ -160,7 +160,7 @@ export function PageHeader({
 }
 
 export function ErrorNote({ error }: { error: unknown }) {
-  const message = error instanceof Error ? error.message : "문제가 발생했습니다";
+  const message = error instanceof Error ? error.message : "문제가 생겼어요. 잠시 후 다시 시도해 주세요.";
   return (
     <div
       role="alert"

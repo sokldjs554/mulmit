@@ -15,7 +15,7 @@ from xml.sax.saxutils import escape, quoteattr
 from app.domain.taxonomy import CATEGORIES, Category
 
 EXTRACT_PROMPT_VERSION = "extract-v3"
-BRIEF_PROMPT_VERSION = "brief-v2"
+BRIEF_PROMPT_VERSION = "brief-v3"
 
 _CATEGORY_LINES = "\n".join(
     f"- {cat.value}: {info.label} (예: {', '.join(info.keywords[:5])})"
@@ -124,6 +124,10 @@ Write in Korean, in Markdown, with exactly these sections:
 ## 누구를 만나야 하나  (departments and roles that appear in the evidence; never invent names)
 ## 제안 전략  (3–5 concrete actions for this vendor, tied to the evidence and the vendor profile)
 ## 리스크  (what could stop or delay it; weak commitment wording; budget changes)
+
+Voice: write the way an experienced colleague briefs a teammate before a sales call — plain,
+friendly 해요체 sentences ("…예요", "…해 보세요"), not stiff officialese (…함, …하였음, …바람)
+and not bare noun fragments. Dates as 2026.03.02, amounts as 3억 5,000만원.
 
 Rules: use only the facts provided; when something is unknown say so; quote evidence in
 「」 when you rely on it; no marketing fluff; keep it under 450 Korean words."""

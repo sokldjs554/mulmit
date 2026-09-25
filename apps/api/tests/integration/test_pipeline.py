@@ -170,3 +170,34 @@ async def test_demo_digest_goes_out_at_eight_kst_through_the_daily_path(
     assert stats["sent"] == 2
     assert {(org, mode) for org, mode, _ in calls} == {(1, "daily"), (2, "daily")}
     assert {now for _, _, now in calls} == {datetime(2026, 9, 24, 23, 0, tzinfo=UTC)}  # 08:00 KST
+
+
+async def test_alert_lines_quote_speech_and_explain_budget_rows(demo_world) -> None:  # type: ignore[no-untyped-def]
+    from app.notify.dispatch import build_items
+
+    async with session_scope() as s:
+        stages = (
+            select(OpportunitySignal.opportunity_id)
+            .join(Signal, Signal.id == OpportunitySignal.signal_id)
+            .group_by(OpportunitySignal.opportunity_id)
+        )
+        budget_only = stages.having(
+            func.bool_and(Signal.stage == "budget_line")
+            & func.bool_or(Signal.budget_krw.is_not(None))
+        )
+        with_council = stages.having(func.bool_or(Signal.stage == "council_mention"))
+        pairs = []
+        for query in (budget_only, with_council):
+            opp_id = await s.scalar(query.limit(1))
+            assert opp_id is not None
+            rec = await s.scalar(select(Recommendation).limit(1))
+            opp = await s.get(Opportunity, opp_id)
+            assert rec is not None and opp is not None
+            pairs.append((rec, opp))
+        budget_item, council_item = await build_items(s, pairs, "https://app.example")
+    assert budget_item["evidence"] is None
+    assert (
+        "예산서에" in budget_item["evidence_note"]
+        and "편성돼 있어요" in budget_item["evidence_note"]
+    )
+    assert council_item["evidence"] and council_item["evidence_note"] is None

@@ -21,15 +21,15 @@ export function stageIndex(stage: string): number {
 }
 
 export const COMMITMENT_LABEL: Record<string, string> = {
-  committed: "확약 (반영·편성)",
-  planned: "추진 계획",
-  reviewing: "검토 수준",
-  declined: "난색 표명",
+  committed: "반영하겠다고 답함",
+  planned: "추진하겠다고 답함",
+  reviewing: "검토하겠다고 답함",
+  declined: "어렵다고 답함",
 };
 
 export const STATUS_LABEL: Record<string, string> = {
-  open: "진행 중",
-  bid_open: "입찰 진행",
+  open: "공고 전",
+  bid_open: "입찰 진행 중",
   closed: "종료",
-  dormant: "휴면",
+  dormant: "한동안 소식 없음",
 };

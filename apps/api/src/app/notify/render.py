@@ -21,6 +21,18 @@ _text_env = Environment(
 )
 
 
+_TEST_NOTE = "알림이 잘 도착하는지 확인하려고 보낸 메시지예요. 이게 보이면 설정은 끝났어요."
+
+
+def when(item: dict[str, Any]) -> str:
+    # Payloads queued before "when" existed carry only the bare forecast window.
+    return str(item.get("when") or f"입찰 예상 {item.get('window') or '미정'}")
+
+
+_env.globals.update(when=when, test_note=_TEST_NOTE)
+_text_env.globals.update(when=when, test_note=_TEST_NOTE)
+
+
 @dataclass(frozen=True, slots=True)
 class RenderedEmail:
     subject: str
@@ -42,19 +54,25 @@ def render_slack(payload: dict[str, Any]) -> dict[str, Any]:
             "text": {"type": "plain_text", "text": f"발주 예측 · {payload['headline']}"},
         },
     ]
+    if not payload["items"]:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": _TEST_NOTE}})
     for item in payload["items"][:10]:
         meta = f"{item['stage_label']} · {item['institution']}"
         if item.get("budget"):
-            meta += f" · 예산 {item['budget']}"
-        meta += f" · 입찰 예상 {item['window']} · 적합도 {item['score_pct']}%"
+            meta += f" · {item['budget']}"
+        meta += f" · {when(item)} · 적합도 {item['score_pct']}점"
         text = f"*<{item['url']}|{item['title']}>*\n{meta}"
         if item.get("evidence"):
             text += f"\n>「{item['evidence']}」"
+        elif item.get("evidence_note"):
+            text += f"\n{item['evidence_note']}"
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
     blocks.append(
         {
             "type": "context",
-            "elements": [{"type": "mrkdwn", "text": f"<{payload['settings_url']}|알림 설정>"}],
+            "elements": [
+                {"type": "mrkdwn", "text": f"<{payload['settings_url']}|알림 받는 방법 바꾸기>"}
+            ],
         }
     )
     return {"text": f"[발주 예측] {payload['headline']}", "blocks": blocks}

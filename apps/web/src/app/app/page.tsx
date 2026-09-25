@@ -42,8 +42,8 @@ export default function FeedPage() {
         title="기회 피드"
         description={
           feed.data
-            ? `우리 회사에 맞는 공공 수요 ${total.toLocaleString("ko-KR")}건 · 이 중 ${early}건은 아직 발주계획도 나오지 않은 단계입니다`
-            : "우리 회사에 맞는 공공 수요를 불러오는 중입니다"
+            ? `우리 회사와 맞는 사업을 ${total.toLocaleString("ko-KR")}건 찾았어요. 그중 ${early}건은 아직 발주계획도 안 나온 초기 단계예요.`
+            : "우리 회사와 맞는 사업을 찾고 있어요…"
         }
       />
 
@@ -52,7 +52,7 @@ export default function FeedPage() {
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" aria-hidden />
           <Input
             aria-label="사업명 검색"
-            placeholder="사업명 검색 (예: 스마트쉘터)"
+            placeholder="사업명으로 찾기 (예: 스마트쉘터)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="pl-9"
@@ -100,11 +100,11 @@ export default function FeedPage() {
       {!feed.isLoading && items.length === 0 ? (
         <EmptyState
           icon={<Radar className="size-8" aria-hidden />}
-          title="조건에 맞는 기회가 아직 없습니다"
-          description="관심 키워드와 분야를 넓히면 더 많은 신호를 받아볼 수 있습니다. 새 회의록과 예산서는 매일 수집됩니다."
+          title="이 조건에 맞는 사업은 아직 없어요"
+          description="키워드나 분야를 조금 넓혀 보세요. 회의록과 예산서는 매일 새로 들어오니까 내일 다시 봐도 좋아요."
           action={
             <Link href="/app/profile">
-              <Button variant="secondary">회사 프로필 수정</Button>
+              <Button variant="secondary">관심 분야 바꾸기</Button>
             </Link>
           }
         />

@@ -56,7 +56,7 @@ export function BudgetLine({ points }: { points: BudgetPoint[] }) {
   return (
     <figure aria-labelledby={`${id}-cap`} className="space-y-2">
       <figcaption id={`${id}-cap`} className="text-[12px] text-muted">
-        단계별로 확인된 금액의 변화
+        단계를 거치며 금액이 이렇게 바뀌었어요
       </figcaption>
       <div ref={ref} className="relative">
         <svg

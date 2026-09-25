@@ -28,7 +28,7 @@ class SignupIn(BaseModel):
     def _email(cls, v: str) -> str:
         v = v.strip().lower()
         if not _EMAIL_RE.match(v):
-            raise ValueError("올바른 이메일 주소가 아닙니다")
+            raise ValueError("이메일 주소를 다시 확인해 주세요")
         return v
 
 

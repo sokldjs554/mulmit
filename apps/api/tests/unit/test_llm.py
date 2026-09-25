@@ -287,30 +287,60 @@ def test_heuristic_titles_read_like_project_names(answer: str, expected: str) ->
     assert _guess_title(answer, "") == expected
 
 
+def _brief_facts(stage: str, last_commitment: str, *, extra: tuple[str, ...] = ()) -> str:
+    return "\n".join(
+        [
+            "# 기회",
+            "- 사업명: 스마트쉘터 설치",
+            "- 기관: 서울특별시 강남구",
+            "- 부서: 교통행정과",
+            f"- 현재 단계: {stage} (공고 전)",
+            "- 추정 예산: 3억 5,000만원",
+            "- 입찰 예상 시기: 2026-09-01 ~ 2026-11-30",
+            *extra,
+            "- 공고 전환 확률(추정): 72%",
+            "",
+            "# 신호 (시간순, 원문 인용)",
+            "- 2025-11-20 [의회 발언] 스마트쉘터 설치, 금액 3억 5,000만원, 확약(반영·편성): "
+            "「내년도 본예산에 반영하겠습니다.」",
+            f"- 2026-03-02 [의회 발언] 스마트쉘터 설치, {last_commitment}: 「…」",
+            "",
+            "# 이 기관의 최근 발주 이력",
+            "- 2025-06-01 스마트폴 구축 (4억원)",
+        ]
+    )
+
+
 def test_template_brief_advice_follows_the_stage_reached() -> None:
     from app.pipeline.brief import template_brief
 
-    def facts(stage: str, last_commitment: str) -> str:
-        return "\n".join(
-            [
-                "# 기회",
-                "- 사업명: 스마트쉘터 설치",
-                "- 기관: 서울특별시 강남구 / 부서: 교통행정과",
-                f"- 현재 단계: {stage} (공고 전)",
-                "- 추정 예산: 3억 5,000만원",
-                "",
-                "# 신호 (시간순, 원문 인용)",
-                f"- 2026-03-02 [의회 발언] 스마트쉘터 설치, {last_commitment}: 「…」",
-                "",
-                "# 이 기관의 최근 발주 이력",
-                "- (수집된 이력 없음)",
-            ]
-        )
-
-    prespec = template_brief(facts("사전규격", "확약(반영·편성)"))
+    prespec = template_brief(_brief_facts("사전규격", "확약(반영·편성)"))
     assert "의견등록 기간" in prespec
     assert "예산에 편성되기 전" not in prespec
 
-    council = template_brief(facts("의회 발언", "검토 중"))
+    council = template_brief(_brief_facts("의회 발언", "검토 중"))
     assert "예산에 편성되기 전" in council
-    assert "가장 최근 발언이 확약이 아닙니다" in council
+    assert "가장 최근 발언이 확약은 아니었어요" in council
+
+
+def test_template_brief_reads_like_a_person_wrote_it() -> None:
+    from app.pipeline.brief import template_brief
+
+    brief = template_brief(_brief_facts("예산 편성", "확약(반영·편성)"))
+    summary = brief.split("\n")[1]
+    assert summary.startswith("서울특별시 강남구 교통행정과의 「스마트쉘터 설치」 건이에요.")
+    assert "입찰은 2026년 9~11월쯤 나올 것으로 보고 있어요." in summary
+    assert "예산은 3억 5,000만원으로 잡혀 있어요." in summary
+    # the timeline speaks in dates people use, says what the council answered, and keeps the quote
+    assert (
+        "- **2025.11.20 · 의회 발언** — 스마트쉘터 설치 (3억 5,000만원). '반영하겠다'고 답했어요."
+        in brief
+    )
+    assert "  > 「내년도 본예산에 반영하겠습니다.」" in brief
+    assert "- 2025.06.01 · 스마트폴 구축 (4억원)" in brief
+    assert "2026-09-01" not in brief  # no raw ISO dates leak into the prose
+
+    published = template_brief(
+        _brief_facts("입찰공고", "확약(반영·편성)", extra=("- 입찰공고일: 2026-06-01",))
+    )
+    assert "입찰공고는 2026.06.01에 나왔어요." in published

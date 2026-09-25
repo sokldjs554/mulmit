@@ -24,7 +24,7 @@ async def get_rule(principal: PrincipalDep, session: SessionDep) -> AlertRuleIO:
 async def put_rule(body: AlertRuleIO, principal: PrincipalDep, session: SessionDep) -> AlertRuleIO:
     if body.mode == "instant" and not PLANS[principal.org.plan].instant_alerts:
         raise HTTPException(
-            status.HTTP_402_PAYMENT_REQUIRED, "즉시 알림은 Pro 플랜부터 사용할 수 있습니다"
+            status.HTTP_402_PAYMENT_REQUIRED, "바로 알림은 Pro 플랜부터 쓸 수 있어요"
         )
     rule = await session.get(AlertRule, principal.org.id)
     if rule is None:
@@ -46,18 +46,26 @@ async def channels(principal: PrincipalDep, session: SessionDep) -> list[AlertCh
     return [AlertChannelOut.model_validate(r) for r in rows]
 
 
+_KIND_KO = {"email": "이메일", "slack": "Slack", "kakao": "카카오 알림톡"}
+
+
 def _validate_target(kind: str, target: str) -> str:
     target = target.strip()
     if kind == "email" and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", target):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "이메일 형식이 아닙니다")
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "이메일 주소를 다시 확인해 주세요"
+        )
     if kind == "slack" and not target.startswith("https://hooks.slack.com/"):
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "Slack Incoming Webhook URL을 입력하세요"
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Slack Incoming Webhook 주소(https://hooks.slack.com/…)를 넣어 주세요",
         )
     if kind == "kakao":
         digits = re.sub(r"\D", "", target)
         if not re.fullmatch(r"01\d{8,9}", digits):
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "휴대폰 번호 형식이 아닙니다")
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "휴대폰 번호를 다시 확인해 주세요"
+            )
         target = digits
     return target
 
@@ -70,7 +78,7 @@ async def add_channel(
     if body.kind not in plan.channels:
         raise HTTPException(
             status.HTTP_402_PAYMENT_REQUIRED,
-            f"{plan.name} 플랜에서는 {body.kind} 채널을 쓸 수 없습니다",
+            f"{plan.name} 플랜에서는 {_KIND_KO.get(body.kind, body.kind)} 알림을 쓸 수 없어요",
         )
     channel = AlertChannel(
         org_id=principal.org.id,
@@ -87,7 +95,7 @@ async def add_channel(
 async def delete_channel(channel_id: int, principal: PrincipalDep, session: SessionDep) -> None:
     channel = await session.get(AlertChannel, channel_id)
     if channel is None or channel.org_id != principal.org.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "채널을 찾을 수 없습니다")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "알림 채널을 찾을 수 없어요")
     await session.delete(channel)
 
 
@@ -97,7 +105,7 @@ async def test_channel(
 ) -> dict[str, str]:
     channel = await session.get(AlertChannel, channel_id)
     if channel is None or channel.org_id != principal.org.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "채널을 찾을 수 없습니다")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "알림 채널을 찾을 수 없어요")
     channel.enabled = True
     channel.last_error = None
     now = datetime.now(UTC)
@@ -109,7 +117,7 @@ async def test_channel(
             dedupe_key=f"test:{channel.id}:{now.timestamp():.0f}",
             payload={
                 "org_name": principal.org.name,
-                "headline": "테스트 알림입니다",
+                "headline": "테스트 알림이에요",
                 "items": [],
                 "settings_url": f"{settings.public_web_url}/app/alerts",
             },

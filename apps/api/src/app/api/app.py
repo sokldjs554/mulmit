@@ -73,7 +73,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             log.exception("request.unhandled")
             response = JSONResponse(
-                {"detail": "일시적인 오류가 발생했습니다", "request_id": request_id},
+                {
+                    "detail": "잠깐 문제가 생겼어요. 잠시 후 다시 시도해 주세요",
+                    "request_id": request_id,
+                },
                 status_code=500,
             )
         response.headers["X-Request-ID"] = request_id

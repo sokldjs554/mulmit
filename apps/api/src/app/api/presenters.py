@@ -29,10 +29,10 @@ from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage
 from app.domain.taxonomy import CATEGORIES, Category
 
 _COMMITMENT_KO = {
-    "committed": "'반영·편성' 확약",
-    "planned": "추진 계획 언급",
-    "reviewing": "'검토' 수준",
-    "declined": "'어렵다' 답변",
+    "committed": "의회에서 '반영하겠다'고 답함",
+    "planned": "의회에서 추진 계획을 밝힘",
+    "reviewing": "의회에서 '검토하겠다'고 답함",
+    "declined": "의회에서 '어렵다'고 답함",
 }
 
 
@@ -48,23 +48,23 @@ def explain(opp: Opportunity, breakdown: dict[str, Any] | None) -> list[str]:
     if breakdown:
         hits = breakdown.get("keyword_hits") or []
         if hits:
-            reasons.append("키워드 일치: " + ", ".join(hits[:3]))
+            reasons.append("키워드: " + ", ".join(hits[:3]))
         feats = breakdown.get("features", {})
         if feats.get("category") == 1.0:
             reasons.append(f"관심 분야: {category_label(opp.category)}")
         if feats.get("region") == 1.0:
-            reasons.append("관심 지역")
+            reasons.append("관심 지역 사업")
         if feats.get("budget") == 1.0 and opp.est_budget_krw:
-            reasons.append("선호 예산 범위 내")
+            reasons.append("원하는 사업 규모")
         days = breakdown.get("days_to_window")
         if isinstance(days, int) and days > 0 and opp.status == "open":
             months = max(1, round(days / 30))
-            reasons.append(f"입찰까지 약 {months}개월 — 사전 영업 가능")
+            reasons.append(f"입찰까지 {months}개월쯤 남음")
     stage = Stage(opp.stage)
     if stage is Stage.COUNCIL and opp.best_commitment:
-        reasons.append(f"의회 답변: {_COMMITMENT_KO.get(opp.best_commitment, opp.best_commitment)}")
+        reasons.append(_COMMITMENT_KO.get(opp.best_commitment, opp.best_commitment))
     elif STAGE_ORDER[stage] >= STAGE_ORDER[Stage.BUDGET] and stage is not Stage.BID:
-        reasons.append(f"{STAGE_LABEL[stage]} 단계 확인")
+        reasons.append(f"{STAGE_LABEL[stage]}까지 확인됨")
     if opp.status == "bid_open":
         reasons.append("입찰 진행 중")
     return reasons

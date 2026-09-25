@@ -63,7 +63,7 @@ erDiagram
   ORGANIZATION ||--o| SUBSCRIPTION : pays
   ORGANIZATION ||--o{ PAYMENT : ""
   ORGANIZATION ||--o{ CREDIT_LEDGER : "append-only"
-  OPPORTUNITY ||--o{ BRIEF : "Deep Brief"
+  OPPORTUNITY ||--o{ BRIEF : "영업 브리핑"
 ```
 
 - **Document**: 원문 한 건(회의록 1회분, 예산서 1권, 조달 레코드 1건). 내용 해시로 중복 제거, 원문 바이트는 콘텐츠 주소 저장소.

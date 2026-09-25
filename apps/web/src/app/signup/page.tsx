@@ -26,7 +26,7 @@ export default function SignupPage() {
       <Card className="w-full max-w-sm p-6">
         <Logo />
         <h1 className="mt-6 text-xl font-bold text-ink">무료로 시작하기</h1>
-        <p className="mt-1 text-sm text-muted">가입하면 Deep Brief 크레딧 3개를 드립니다.</p>
+        <p className="mt-1 text-sm text-muted">가입하면 크레딧 3개를 드려요. 영업 브리핑 한 건을 바로 받아 볼 수 있어요.</p>
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <Field label="회사명" htmlFor="company">
             <Input id="company" value={form.company_name} onChange={set("company_name")} required maxLength={200} />
@@ -54,7 +54,7 @@ export default function SignupPage() {
           </Button>
         </form>
         <p className="mt-5 text-center text-[13px] text-muted">
-          이미 계정이 있나요?{" "}
+          이미 계정이 있으세요?{" "}
           <Link href="/login" className="font-medium text-accent-text hover:underline">
             로그인
           </Link>
