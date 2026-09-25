@@ -42,6 +42,7 @@ log = get_logger(__name__)
 class Provider(Protocol):
     name: str
     extract_model: str
+    extract_effort: str | None
     brief_model: str
 
     async def extract(self, ctx: ChunkContext) -> LLMResult[ExtractionOutput]: ...
@@ -56,19 +57,22 @@ class ExtractionAttempt:
     reason: str | None = None
 
 
-def _estimate_cost(model: str, user_message: str) -> Decimal:
+def estimate_extract_cost(model: str, user_message: str, *, output_tokens: int = 900) -> Decimal:
     # Conservative: ~1 token per hangul character, cached system prompt at read price.
     usage = Usage(
         input_tokens=len(user_message),
-        output_tokens=900,
+        output_tokens=output_tokens,
         cache_read_tokens=len(EXTRACT_SYSTEM),
     )
     return usage.cost_usd(model)
 
 
-def cache_key(model: str, user_message: str) -> str:
+def cache_key(model: str, effort: str | None, user_message: str) -> str:
+    # Effort changes the answer as much as the model does; without it in the key, raising
+    # APP_LLM_EXTRACT_EFFORT would keep serving answers produced at the old effort.
     h = hashlib.sha256()
-    for part in (model, EXTRACT_PROMPT_VERSION, EXTRACTION_SCHEMA_VERSION, user_message):
+    parts = (model, effort or "", EXTRACT_PROMPT_VERSION, EXTRACTION_SCHEMA_VERSION, user_message)
+    for part in parts:
         h.update(part.encode())
         h.update(b"\x00")
     return h.hexdigest()
@@ -148,7 +152,7 @@ class LLMService:
         primary = self.primary
         model = primary.extract_model
         user_message = extract_user_message(ctx)
-        key = cache_key(model, user_message)
+        key = cache_key(model, primary.extract_effort, user_message)
         extractor_id = f"{primary.name}:{model}:{EXTRACT_PROMPT_VERSION}"
 
         if self.use_cache:
@@ -173,7 +177,7 @@ class LLMService:
                 )
 
         try:
-            await self.guard.check(_estimate_cost(model, user_message))
+            await self.guard.check(estimate_extract_cost(model, user_message))
             result = await primary.extract(ctx)
         except LLMBudgetExceededError as exc:
             await self._record(

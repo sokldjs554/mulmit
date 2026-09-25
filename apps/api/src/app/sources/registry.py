@@ -12,7 +12,9 @@ from app.db.models import Source
 from app.runtime import Runtime
 from app.sources import clik, g2b, lofin
 from app.sources.base import DocType, FetchWindow, RawRecord, SourceAdapter
+from app.sources.crawler import BoardCrawlerAdapter
 from app.sources.http import FatalSourceError, ResilientClient
+from app.sources.resilience import Limiter, MemoryLimiter
 
 SOURCE_CATALOG: tuple[dict[str, Any], ...] = (
     {"key": "clik_minutes", "name": "국회도서관 지방의정포털 — 지방의회 회의록", "adapter": "clik"},
@@ -24,7 +26,11 @@ SOURCE_CATALOG: tuple[dict[str, Any], ...] = (
 
 FIXTURE_CATALOG: tuple[dict[str, Any], ...] = (
     {"key": "fixture_minutes", "name": "[데모] 합성 지방의회 회의록", "adapter": "fixture"},
-    {"key": "fixture_budget", "name": "[데모] 합성 예산서 (PDF·스캔·HWPX)", "adapter": "fixture"},
+    {
+        "key": "fixture_budget",
+        "name": "[데모] 합성 지자체 누리집 예산 게시판 (크롤링 · PDF·스캔·HWPX)",
+        "adapter": "crawler",
+    },
     {"key": "fixture_order_plan", "name": "[데모] 합성 발주계획", "adapter": "fixture"},
     {"key": "fixture_prespec", "name": "[데모] 합성 사전규격", "adapter": "fixture"},
     {"key": "fixture_bid", "name": "[데모] 합성 입찰공고", "adapter": "fixture"},
@@ -37,6 +43,15 @@ def _world(anchor: str, seed: int, scale: float, scanned_ratio: float) -> Any:
 
     return build_world(
         anchor=date.fromisoformat(anchor), seed=seed, scale=scale, scanned_ratio=scanned_ratio
+    )
+
+
+def fixture_world(config: dict[str, Any]) -> Any:
+    return _world(
+        config.get("anchor", today_kst().isoformat()),
+        int(config.get("seed", 7)),
+        float(config.get("scale", 1.0)),
+        float(config.get("scanned_ratio", 0.3)),
     )
 
 
@@ -56,12 +71,7 @@ class FixtureAdapter:
         self.doc_type: DocType = doc_types[key]
 
     def world(self) -> Any:
-        return _world(
-            self._cfg.get("anchor", today_kst().isoformat()),
-            int(self._cfg.get("seed", 7)),
-            float(self._cfg.get("scale", 1.0)),
-            float(self._cfg.get("scanned_ratio", 0.3)),
-        )
+        return fixture_world(self._cfg)
 
     async def aclose(self) -> None:
         return None
@@ -87,6 +97,8 @@ def build_adapter(source: Source, runtime: Runtime) -> SourceAdapter:
 
     if source.adapter == "fixture":
         return FixtureAdapter(source.key, source.config)
+    if source.adapter == "crawler":
+        return _crawler(source, runtime)
     if source.adapter == "g2b":
         if not s.data_go_kr_service_key:
             raise FatalSourceError("APP_DATA_GO_KR_SERVICE_KEY is not configured")
@@ -113,3 +125,31 @@ def build_adapter(source: Source, runtime: Runtime) -> SourceAdapter:
             overrides=source.config.get("overrides"),
         )
     raise FatalSourceError(f"unknown adapter {source.adapter!r}")
+
+
+def _crawler(source: Source, runtime: Runtime) -> BoardCrawlerAdapter:
+    """Real boards come from ``sources.config``; the demo source crawls the synthetic 누리집."""
+    s = runtime.settings
+    config = dict(source.config)
+    transport = None
+    limiter: Limiter = runtime.limiter
+    if source.key.startswith("fixture_"):
+        from app.demo.sites import SyntheticGovSites
+
+        sites = SyntheticGovSites(fixture_world(config).records[source.key])
+        config |= {"boards": sites.boards(), "delay_seconds": 0, "structured": {"synthetic": True}}
+        transport = sites.transport()
+        limiter = MemoryLimiter()  # an in-process fake site needs no politeness
+
+    def client_for_host(host: str) -> ResilientClient:
+        return ResilientClient(
+            f"{source.key}@{host}",  # rate limit and circuit breaker per host
+            base_url=f"https://{host}",
+            limiter=limiter,
+            breaker=runtime.breaker,
+            timeout=s.source_http_timeout_seconds,
+            max_attempts=s.source_max_attempts,
+            transport=transport,
+        )
+
+    return BoardCrawlerAdapter(source.key, config, client_for_host)

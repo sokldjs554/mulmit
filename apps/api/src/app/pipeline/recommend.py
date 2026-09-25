@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, any_, delete, literal, or_, select, true
+from sqlalchemy import ColumnElement, delete, or_, select, text, true
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,11 @@ WEIGHTS: dict[str, float] = {
     "lead_time": 0.10,
 }
 MAX_PER_ORG = 150
+CANDIDATES_PER_SOURCE = 300
+
+# Written as a literal (not bind parameters) so the planner can match the partial index
+# ix_opportunities_open_embedding_hnsw even when the driver reuses a generic plan.
+OPEN_ONLY = text("opportunities.status IN ('open', 'bid_open')")
 
 
 @dataclass(slots=True)
@@ -143,26 +148,28 @@ def score_opportunity(
 
 
 async def _candidates(session: AsyncSession, profile: CompanyProfile) -> list[Opportunity]:
-    base = select(Opportunity).where(Opportunity.status.in_(("open", "bid_open")))
+    base = select(Opportunity).where(OPEN_ONLY)
     found: dict[int, Opportunity] = {}
     if profile.embedding is not None:
+        # An HNSW scan returns at most hnsw.ef_search rows (default 40). Ask for as many as we
+        # want back, or "300 nearest" quietly becomes "≤40 nearest" (docs/performance.md).
+        await session.execute(text(f"SET LOCAL hnsw.ef_search = {CANDIDATES_PER_SOURCE}"))
         near = await session.scalars(
-            base.order_by(Opportunity.embedding.cosine_distance(profile.embedding)).limit(300)
+            base.order_by(Opportunity.embedding.cosine_distance(profile.embedding)).limit(
+                CANDIDATES_PER_SOURCE
+            )
         )
         found.update({o.id: o for o in near})
     if profile.keywords:
-        conds: list[ColumnElement[bool]] = [
-            Opportunity.title.ilike(f"%{kw}%") for kw in profile.keywords if kw.strip()
-        ]
-        conds += [
-            literal(kw) == any_(Opportunity.keywords) for kw in profile.keywords if kw.strip()
-        ]
+        words = [kw for kw in profile.keywords if kw.strip()]
+        conds: list[ColumnElement[bool]] = [Opportunity.title.ilike(f"%{kw}%") for kw in words]
+        conds += [Opportunity.keywords.contains([kw]) for kw in words]  # GIN-served `@>`
         if conds:
-            kw_rows = await session.scalars(base.where(or_(*conds)).limit(300))
+            kw_rows = await session.scalars(base.where(or_(*conds)).limit(CANDIDATES_PER_SOURCE))
             found.update({o.id: o for o in kw_rows})
     if profile.categories:
         cat_rows = await session.scalars(
-            base.where(Opportunity.category.in_(profile.categories)).limit(300)
+            base.where(Opportunity.category.in_(profile.categories)).limit(CANDIDATES_PER_SOURCE)
         )
         found.update({o.id: o for o in cat_rows})
     return list(found.values())

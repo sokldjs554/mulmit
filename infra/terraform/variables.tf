@@ -12,7 +12,7 @@ variable "region" {
 variable "github_repository" {
   description = "owner/repo allowed to deploy through Workload Identity Federation."
   type        = string
-  default     = "sokldjs554/mulmit"
+  default     = "sokldjs554/procurement-forecast"
 }
 
 variable "web_url" {

@@ -18,9 +18,11 @@
 - 문서 6건 · CER 0.0113 → 보정 후 0.0099
 - 금액 토큰 정확도 100.0% → 100.0%
 
-## 수기 작성 세트 (extractor: heuristic-v2)
-- 정밀도 88.9% · 재현율 61.5% (기대 13건, 예측 9건)
-- 필드 정확도: category 75.0%, commitment 62.5%, budget 75.0%, expected_year 75.0%
+## 수기 작성 세트 (extractor: heuristic-v2, 54건)
+- 정밀도 92.0% · 재현율 46.0% (기대 50건, 예측 25건)
+- 필드 정확도: category 82.6%, commitment 82.6%, budget 73.9%, expected_year 91.3%
+- 검증기 통과 후(저장되는 값): 정밀도 92.0% · 재현율 46.0% · category 82.6%, commitment 82.6%, budget 73.9%, expected_year 91.3% · 근거를 찾지 못해 버린 신호 0건
+- 모델별 비교는 `manage eval llm` → [evaluation-llm.md](evaluation-llm.md)
 
 ## 백테스트
 - 입찰공고 48건 중 75.0%가 공고 이전에 공개 신호를 가짐

@@ -7,6 +7,7 @@ flowchart LR
   subgraph Sources[공공 데이터]
     CLIK[국회도서관 지방의정포털<br/>의회 회의록]
     LOFIN[지방재정365<br/>세출예산서 PDF·HWP]
+    BOARD[지자체 누리집 게시판<br/>크롤링]
     G2B[조달청 나라장터<br/>발주계획·사전규격·입찰공고]
   end
 
@@ -29,7 +30,7 @@ flowchart LR
     GCS[(원문 저장소<br/>file:// · gs://)]
   end
 
-  CLIK & LOFIN & G2B --> ING --> GCS
+  CLIK & LOFIN & G2B & BOARD --> ING --> GCS
   ING --> PARSE --> CHUNK --> TRI --> EXT --> VER
   VER -- accepted --> LINK --> OPP --> REC --> NOTI
   VER -- needs_review --> REVIEW[운영 콘솔<br/>검토 대기열]
@@ -74,7 +75,7 @@ erDiagram
 
 | 단계 | 규칙 | 코드 |
 |---|---|---|
-| 수집 | 토큰 버킷 + KST 일일 한도(Redis Lua), 서킷 브레이커, data.go.kr의 HTTP 200 오류 본문 분류, 7일 창 분할·페이지네이션, 증분 커서 | `sources/` |
+| 수집 | 토큰 버킷 + KST 일일 한도(Redis Lua), 서킷 브레이커, data.go.kr의 HTTP 200 오류 본문 분류, 7일 창 분할·페이지네이션, 증분 커서. API가 없는 누리집 게시판은 robots.txt를 지키는 크롤러로 수집 | `sources/` |
 | 파싱 | PDF 페이지별 텍스트층 품질 검사 → 부족하면 그 페이지만 300dpi 렌더링 후 tesseract `kor+eng`(Otsu 이진화), 금액·조사 위주의 OCR 후보정. HWP5는 레코드 파서(PARA_TEXT), HWPX는 XML | `parsing/` |
 | 청크 | 회의록은 질문–답변 교환 단위, 예산서는 세부사업 블록 단위, 표 머리의 `(단위: 천원)` 기억 | `parsing/chunking.py` |
 | 트리아지 | 조달 동사·분야 키워드·발언 강도·금액·미래 시점·잡음(절차 발언) 특징의 로지스틱 점수 < 0.35면 LLM 호출 생략 | `pipeline/triage.py` |
@@ -92,6 +93,10 @@ erDiagram
 - 로컬: `docker-compose.yml`(PostgreSQL+pgvector, Redis, Mailpit, API, 워커, 웹).
 - 프로덕션(GCP 서울): Cloud Run(web 공개, api 내부 전용, worker CPU 상시 1대), 마이그레이션 Cloud Run Job, Cloud SQL, Memorystore, Secret Manager, GCS, Artifact Registry. Terraform: [`infra/terraform`](../infra/terraform/README.md).
 - CI: ruff·mypy strict·pytest(실제 PostgreSQL/Redis 서비스 컨테이너)·OpenAPI 드리프트·데모 파이프라인·평가 품질 게이트·웹 typecheck/lint/test/build·Terraform validate·Docker 빌드. 배포: 태그 → WIF 인증 → 이미지 푸시 → 마이그레이션 Job → 롤아웃 → 스모크 테스트.
+
+## 대용량에서의 쿼리
+
+`manage bench`가 공고 10만·신호 40만 건 규모에서 핫 쿼리의 실행 계획을 최초 스키마와 비교합니다. 그 측정으로 찾은 문제(벡터 검색 결과 누락, 참조번호 전체 스캔 등)와 인덱스 결정은 [ADR-0010](adr/0010-measure-at-volume.md), 수치는 [performance.md](performance.md).
 
 ## 관측
 

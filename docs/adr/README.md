@@ -12,3 +12,5 @@
 | [0006](0006-one-model-low-effort.md) | 추출 모델: 가장 좋은 모델 하나를 낮은 effort로 | 채택 |
 | [0007](0007-synthetic-world-evaluation.md) | 평가는 정답을 심은 합성 세계 + 수기 세트 + 백테스트 | 채택 |
 | [0008](0008-bff-and-typed-client.md) | 웹은 BFF 프록시 + httpOnly 쿠키 + OpenAPI 생성 타입 | 채택 |
+| [0009](0009-polite-board-crawler.md) | 지자체 누리집 게시판은 예의 바른 크롤러로 수집한다 | 채택 |
+| [0010](0010-measure-at-volume.md) | 쿼리는 운영 규모 데이터에서 측정하고 고친다 | 채택 |

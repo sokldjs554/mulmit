@@ -52,15 +52,13 @@ async def _funnel(session: SessionDep) -> FunnelOut:
             )
         ).all()
     )
-    chunks = await session.scalar(select(func.count()).select_from(DocumentChunk)) or 0
-    triaged = (
-        await session.scalar(
-            select(func.count())
-            .select_from(DocumentChunk)
-            .where(DocumentChunk.triage_passed.is_(True))
+    # One pass over the largest table instead of two (docs/performance.md).
+    chunk_counts = (
+        await session.execute(
+            select(func.count(), func.count().filter(DocumentChunk.triage_passed.is_(True)))
         )
-        or 0
-    )
+    ).one()
+    chunks, triaged = int(chunk_counts[0]), int(chunk_counts[1])
     signals = dict(
         (await session.execute(select(Signal.verdict, func.count()).group_by(Signal.verdict))).all()
     )

@@ -112,7 +112,7 @@ async def demo_world(runtime: object) -> object:
         await s.flush()
         await s.execute(
             update(Source)
-            .where(Source.adapter == "fixture")
+            .where(Source.key.like("fixture_%"))
             .values(
                 config={
                     "anchor": anchor.isoformat(),
