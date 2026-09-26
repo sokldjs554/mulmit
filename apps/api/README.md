@@ -8,6 +8,8 @@ uv run manage db upgrade                 # 마이그레이션
 uv run manage seed --anchor 2026-09-25   # 기관 사전 · 수집원 · 데모 테넌트 · 합성 세계
 uv run manage demo run                   # 전체 파이프라인을 프로세스 안에서 실행
 uv run manage eval all --record          # 추출·연결·OCR·수기 세트 평가
+uv run manage sources ingest -s g2b --days 30 --rows 999 --max-calls 250   # 실데이터 백필(호출 수 보고)
+uv run manage pipeline run               # 처리 대기 문서 처리 → 신호 연결
 uv run uvicorn app.api.app:create_app --factory --reload
 uv run manage worker                     # arq 워커 + cron (Cloud Run에서는 $PORT에 /healthz)
 uv run pytest                            # 통합 테스트는 PostgreSQL(pgvector)·Redis 필요 (make infra)
