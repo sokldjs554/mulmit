@@ -195,6 +195,16 @@ def queries(vec: str, inst: str, ref_hit: str, ref_miss: str) -> list[Query]:
             "ORDER BY embedding <=> $2::vector LIMIT 12",
         ),
         Query(
+            "link_candidate_refs",
+            "기회 연결: 후보 기회 12건이 가진 번호 (다른 번호면 후보에서 제외)",
+            "SELECT os.opportunity_id, s.external_refs FROM opportunity_signals os "
+            "JOIN signals s ON s.id = os.signal_id WHERE os.opportunity_id IN "
+            "(11, 22, 33, 44, 55, 66, 77, 88, 99, 110, 121, 132)",
+            "SELECT os.opportunity_id, s.external_refs FROM opportunity_signals os "
+            "JOIN signals s ON s.id = os.signal_id WHERE os.opportunity_id IN "
+            "(11, 22, 33, 44, 55, 66, 77, 88, 99, 110, 121, 132)",
+        ),
+        Query(
             "feed_page",
             "고객 피드 첫 페이지 (점수순 21건)",
             "SELECT r.opportunity_id, r.score FROM recommendations r "
