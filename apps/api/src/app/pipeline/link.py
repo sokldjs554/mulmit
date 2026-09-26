@@ -146,8 +146,8 @@ async def _reference_match(session: AsyncSession, signal: Signal) -> int | None:
         )
         if opp_id is not None:
             return int(opp_id)
-    # …and so do 발주계획, often registered after the 공고 is already out (72% of live plans
-    # named their bid; 2026-09-26), so look the other way too.
+    # …and so do 발주계획 (72% of live plans, 2026-09-26). Half of them were registered the
+    # same day as their 공고, so the bid can be linked first; look the other way too.
     for no in signal.external_refs.get("bid_notice_nos") or ():
         opp_id = await session.scalar(
             select(OpportunitySignal.opportunity_id)
@@ -171,6 +171,29 @@ async def _candidates(session: AsyncSession, signal: Signal, limit: int = 12) ->
     return list((await session.scalars(stmt.limit(limit))).all())
 
 
+async def _without_conflicting_numbers(
+    session: AsyncSession, signal: Signal, candidates: list[Opportunity]
+) -> list[Opportunity]:
+    """Drop opportunities that already hold a *different* 발주계획번호 or 사전규격번호 than the
+    signal: two numbers are two purchases, however alike the titles. On 30 days of live data
+    (2026-09-26) 1,396 of 1,987 similarity links joined such pairs — one 기관 puts out dozens
+    of "…도로 정비공사" a month."""
+    mine = {k: signal.external_refs[k] for k in _REF_KEYS if signal.external_refs.get(k)}
+    if not mine or not candidates:
+        return candidates
+    rows = await session.execute(
+        select(OpportunitySignal.opportunity_id, Signal.external_refs)
+        .join(Signal, Signal.id == OpportunitySignal.signal_id)
+        .where(OpportunitySignal.opportunity_id.in_([o.id for o in candidates]))
+    )
+    conflicting = {
+        opp_id
+        for opp_id, refs in rows
+        if any(refs.get(k) and refs[k] != v for k, v in mine.items())
+    }
+    return [o for o in candidates if o.id not in conflicting]
+
+
 async def decide(session: AsyncSession, runtime: Runtime, signal: Signal) -> LinkDecision | None:
     ref = await _reference_match(session, signal)
     if ref is not None:
@@ -179,7 +202,9 @@ async def decide(session: AsyncSession, runtime: Runtime, signal: Signal) -> Lin
         return None
     threshold = runtime.settings.link_threshold
     band = runtime.settings.link_review_band
-    candidates = await _candidates(session, signal)
+    candidates = await _without_conflicting_numbers(
+        session, signal, await _candidates(session, signal)
+    )
     best: tuple[float, Opportunity, dict[str, float]] | None = None
     for opp in candidates:
         score, parts = score_candidate(signal, opp)

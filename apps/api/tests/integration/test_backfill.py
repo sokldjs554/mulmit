@@ -29,7 +29,7 @@ PLAN = {
     "sumOrderAmt": "76230000",
     "orderYear": "2026",
     "orderMnth": "10",
-    "bidNtceNoList": "R26BK90000001000",  # the plan was registered after its 공고
+    "bidNtceNoList": "R26BK90000001000",  # registered once the 공고 was out
 }
 BID = {
     "bidNtceNo": "R26BK90000001",
@@ -44,9 +44,7 @@ BID = {
 }
 
 
-async def test_a_plan_registered_after_its_bid_joins_the_bids_opportunity(
-    demo_world, runtime
-) -> None:  # type: ignore[no-untyped-def]
+async def test_a_plan_linked_after_its_bid_joins_the_bids_opportunity(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
     async with get_sessionmaker()() as s:
         source = Source(key="test_g2b_shapes", name="t", adapter="g2b", enabled=False, config={})
         s.add(source)
@@ -147,3 +145,36 @@ async def test_backfill_stops_a_source_at_its_call_budget(demo_world, runtime, m
     assert report["status"] == "partial"  # what the first call brought in is kept
     assert report["created"] == 3
     assert "CallBudgetExhaustedError" in report["error"]
+
+
+async def test_look_alike_plans_with_different_numbers_stay_apart(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
+    # One 기관, two 발주계획 a few days apart, titles one word apart (common in live data).
+    first = PLAN | {"bizNm": "관내 도로 정비공사(1차)", "bidNtceNoList": ""}
+    second = first | {"orderPlanUntyNo": "R26DD90000002", "bizNm": "관내 도로 정비공사(2차)"}
+    second |= {"nticeDt": "2026-09-24 10:00:00"}
+    bid = BID | {"bidNtceNo": "R26BK90000002", "bidNtceNm": "관내 도로 정비공사(2차)"}
+    bid |= {"bidNtceDt": "2026-09-25 10:00:00", "orderPlanUntyNo": "R26DD90000002"}
+    async with get_sessionmaker()() as s:
+        source = Source(key="test_g2b_lookalike", name="t", adapter="g2b", enabled=False, config={})
+        s.add(source)
+        await s.flush()
+        signal_ids: list[int] = []
+        for doc_type, item in (("order_plan", first), ("order_plan", second), ("bid_notice", bid)):
+            rec = map_item(doc_type, item)  # type: ignore[arg-type]
+            assert rec is not None
+            doc, _ = await upsert_record(s, source, rec, runtime)
+            signal_ids += (await process_document(s, runtime, doc.id)).signal_ids
+        await link_signals(s, runtime, signal_ids, today=date(2026, 9, 26))
+        opp_of = dict(
+            (
+                await s.execute(
+                    select(OpportunitySignal.signal_id, OpportunitySignal.opportunity_id).where(
+                        OpportunitySignal.signal_id.in_(signal_ids)
+                    )
+                )
+            ).all()
+        )
+        await s.rollback()
+    plan1, plan2, bid_signal = signal_ids
+    assert opp_of[plan1] != opp_of[plan2]
+    assert opp_of[bid_signal] == opp_of[plan2]
