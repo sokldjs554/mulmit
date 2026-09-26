@@ -14,7 +14,17 @@
 
 개발 컨테이너의 네트워크 정책 때문에 `clik.nanet.go.kr`, `data.go.kr`, `lofin.mois.go.kr`에 직접 접속하지 못했습니다. 그래서 세 어댑터의 **엔드포인트 경로와 필드명은 공개 명세·검색 결과·공개 저장소를 근거로 작성**했고, `tests/unit/test_sources.py`의 계약 픽스처로만 검증했습니다. 실제 키로 처음 돌릴 때는 운영 콘솔 *수집원* 화면에서 첫 실행 결과(가져온 수·신규·오류)를 확인하세요.
 
-**2026-09-26 첫 실호출** ([`source-check.md`](source-check.md)): `apis.data.go.kr`의 `ad`/`ao` 경로 9개는 모두 존재하고(접두어 없는 옛 경로는 오류 12 "서비스 없음"), 키 전달 방식도 게이트웨이까지 정상입니다. 다만 그 키가 세 서비스 모두 활용신청 전이라 전부 오류 30으로 거절돼, **필드명·채움 비율은 아직 검증하지 못했습니다.** 이때 게이트웨이가 오류를 HTTP 200이 아니라 **HTTP 403 + JSON `OpenAPI_ServiceResponse`**로 보낸다는 것을 확인해 `http.py`가 이 본문의 코드로 분류하도록 고쳤습니다. 해외 경로에서는 TLS 연결이 가끔 끊기거나(`ConnectTimeout`, `Connection reset`) 느려서 점검 명령은 오퍼레이션마다 세 번까지 시도합니다.
+**2026-09-26 첫 실호출(키 미승인)** ([`source-check.md`](source-check.md)): `apis.data.go.kr`의 `ad`/`ao` 경로 9개는 모두 존재하고(접두어 없는 옛 경로는 오류 12 "서비스 없음"), 키 전달 방식도 게이트웨이까지 정상입니다. 다만 그 키가 세 서비스 모두 활용신청 전이라 전부 오류 30으로 거절돼, **필드명·채움 비율은 아직 검증하지 못했습니다.** 이때 게이트웨이가 오류를 HTTP 200이 아니라 **HTTP 403 + JSON `OpenAPI_ServiceResponse`**로 보낸다는 것을 확인해 `http.py`가 이 본문의 코드로 분류하도록 고쳤습니다. 해외 경로에서는 TLS 연결이 가끔 끊기거나(`ConnectTimeout`, `Connection reset`) 느려서 점검 명령은 오퍼레이션마다 세 번까지 시도합니다.
+
+**2026-09-26 첫 실데이터 점검** (세 서비스 활용신청 후, 최근 7일 첫 페이지): 9개 오퍼레이션 모두 성공했고, 받은 항목은 전부 레코드로 변환됐습니다. id·제목·날짜 필드명은 명세 그대로였습니다.
+
+| 유형 | 용역 | 물품 | 공사 | 고친 것 |
+|---|---:|---:|---:|---|
+| 발주계획 | 1,152 | 941 | 921 | `orderBgnYm`·`orderEndYm`(발주년월)이 필수 — 없으면 HTTP 200 + `nkoneps.com.response.ResponseError` 오류 08이 오는데, 이걸 빈 페이지(0건 "성공")로 읽고 있었음. 창 앞뒤 1년씩 넣고, 이 오류 본문과 나라장터 코드 06~08을 즉시 실패로 분류 |
+| 사전규격 | 883 | 724 | 43 | 없음 |
+| 입찰공고 | 2,010 | 1,756 | 1,416 | 공사는 `asignBdgtAmt` 대신 `bdgtAmt`로 예산을 줌 → 금액 매핑에 추가(전에는 부가세 빠진 `presmptPrce`로 떨어짐) |
+
+채움 비율이 낮은 필드는 필드명 문제가 아니라 원래 비어 있는 값입니다. 사전규격 응답에는 `orderPlanUntyNo` 필드 자체가 없어 발주계획번호가 0%이고(사전규격→발주계획 연결은 번호가 아니라 유사도로), 공사 입찰공고의 `bfSpecRgstNo`는 1,000건 중 19건만 차 있습니다(공사 사전규격 자체가 주 43건). 수의계약 공고 일부는 `bidClseDt`가 비어 있습니다.
 
 키를 처음 넣었을 때는 파이프라인을 돌리기 전에 점검 명령부터 실행합니다. 데이터베이스 없이 조달청 오퍼레이션 9개(발주계획·사전규격·입찰공고 × 용역·물품·공사)를 최근 7일로 한 번씩 호출하고, 결과를 `docs/source-check.md`에 씁니다.
 
@@ -45,7 +55,7 @@ WHERE key = 'clik_minutes';
 |---|---|---|
 | CLIK: 키당 하루 1,000회, 호출당 100건 | 회의 날짜로 페이지 이동, 저장하지 않은 회의록만 본문 호출 | `clik.py` |
 | data.go.kr: 개발 키 오퍼레이션당 하루 1,000회, 조회 기간 제한 | 7일 창으로 쪼개 페이지네이션, KST 일일 한도 카운터 | `g2b.py`, `resilience.py` |
-| 한도 초과·오류를 **HTTP 200 + 오류 본문**(XML·JSON), 키 오류는 **HTTP 401/403 + JSON `OpenAPI_ServiceResponse`**로 응답 | 상태 코드보다 본문의 `resultCode`/`returnReasonCode`로 분류: 한도(22) → KST 자정 이후로 재예약, 키·파라미터(10~33) → 즉시 실패(운영자 확인), 일시 오류 → 재시도 | `http.py` |
+| 한도 초과·오류를 **HTTP 200 + 오류 본문**(XML·JSON), 키 오류는 **HTTP 401/403 + JSON `OpenAPI_ServiceResponse`**로 응답 | 상태 코드보다 본문의 `resultCode`/`returnReasonCode`로 분류: 한도(22) → KST 자정 이후로 재예약, 키·파라미터(06~08, 10~33) → 즉시 실패(운영자 확인), 일시 오류 → 재시도 | `http.py` |
 | 429/5xx/타임아웃 | 지수 백오프 + full jitter, `Retry-After` 존중 | `http.py` |
 | 제공처 장애 | 수집원별 서킷 브레이커(연속 5회 실패 → 10분 차단 → 1회 탐침) | `resilience.py` |
 | 워커 여러 대가 한도 공유 | 토큰 버킷·일일 카운터·서킷 상태 모두 Redis(Lua로 원자적 처리) | `resilience.py` |
@@ -57,8 +67,8 @@ WHERE key = 'clik_minutes';
 | 유형 | 경로 | 외부 ID | 연결에 쓰는 필드 |
 |---|---|---|---|
 | 발주계획 | `/ao/OrderPlanSttusService/getOrderPlanSttusList{Servc,Thng,Cnstwk}` | `orderPlanUntyNo` | `bizNm`, `sumOrderAmt`, `orderYear`·`orderMnth`, `orderInsttNm`, `deptNm` |
-| 사전규격 | `/ao/HrcspSsstndrdInfoService/getPublicPrcureThngInfo{Servc,Thng,Cnstwk}` | `bfSpecRgstNo` | `prdctClsfcNoNm`, `asignBdgtAmt`, `orderPlanUntyNo`, `bidNtceNoList`, `rlDminsttNm` |
-| 입찰공고 | `/ad/BidPublicInfoService/getBidPblancListInfo{Servc,Thng,Cnstwk}` | `bidNtceNo`-`bidNtceOrd` | `bidNtceNm`, `asignBdgtAmt`/`presmptPrce`, `bfSpecRgstNo`, `orderPlanUntyNo`, `dminsttNm` |
+| 사전규격 | `/ao/HrcspSsstndrdInfoService/getPublicPrcureThngInfo{Servc,Thng,Cnstwk}` | `bfSpecRgstNo` | `prdctClsfcNoNm`, `asignBdgtAmt`, `bidNtceNoList`, `rlDminsttNm` (`orderPlanUntyNo`는 응답에 없음) |
+| 입찰공고 | `/ad/BidPublicInfoService/getBidPblancListInfo{Servc,Thng,Cnstwk}` | `bidNtceNo`-`bidNtceOrd` | `bidNtceNm`, `asignBdgtAmt`(공사는 `bdgtAmt`)/`presmptPrce`, `bfSpecRgstNo`, `orderPlanUntyNo`, `dminsttNm` |
 
 - 참조번호(`orderPlanUntyNo`, `bfSpecRgstNo`, 공고번호)가 있으면 **유사도보다 먼저** 그 번호로 기회를 잇습니다.
 - 조달청 기관코드는 우리 기관 사전의 코드와 체계가 달라 이름으로 해석합니다. "중구청"처럼 광역시가 빠진 이름은 모호로 처리해 검토 대기열로 보냅니다.

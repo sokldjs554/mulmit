@@ -209,3 +209,143 @@ async def test_g2b_adapter_pages_and_slices_windows() -> None:
     # 2 weekly slices x 3 service types x 2 pages
     assert len(seen) == 12
     assert len(records) == 2 * 3 * 103
+
+
+# 나라장터's own error wrapper, as sent live on 2026-09-26 (HTTP 200) when 발주계획 was called
+# without orderBgnYm/orderEndYm. ``_items`` found no ``response.body`` and reported 0 items.
+G2B_MISSING_PARAM_JSON = {
+    "nkoneps.com.response.ResponseError": {
+        "header": {"resultCode": "08", "resultMsg": "필수값 입력 에러"}
+    }
+}
+
+
+async def test_g2b_error_wrapper_is_not_read_as_an_empty_page() -> None:
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(200, json=G2B_MISSING_PARAM_JSON)
+
+    with pytest.raises(FatalSourceError, match="08 필수값 입력 에러"):
+        await _client(handler).get_json("/x")
+    assert calls["n"] == 1  # a missing parameter will not fix itself
+
+
+async def test_g2b_order_plan_asks_for_an_order_month_range() -> None:
+    seen: list[httpx.QueryParams] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.params)
+        body = {
+            "response": {"header": {"resultCode": "00"}, "body": {"items": [], "totalCount": 0}}
+        }
+        return httpx.Response(200, json=body)
+
+    adapter = G2BAdapter("g2b_order_plan", _client(handler), "KEY")
+    _ = [r async for r in adapter.fetch(FetchWindow(date(2026, 9, 20), date(2026, 9, 26)))]
+    assert len(seen) == 3
+    assert {(p["orderBgnYm"], p["orderEndYm"]) for p in seen} == {("202501", "202712")}
+
+    bids = G2BAdapter("g2b_bid", _client(handler), "KEY")
+    seen.clear()
+    _ = [r async for r in bids.fetch(FetchWindow(date(2026, 9, 20), date(2026, 9, 26)))]
+    assert all("orderBgnYm" not in p for p in seen)
+
+
+# Trimmed items from the first live call (2026-09-26); contact fields replaced.
+LIVE_ORDER_PLAN_THNG = {
+    "bsnsDivCd": "01",
+    "bsnsDivNm": "물품",
+    "orderYear": "2027",
+    "orderInsttCd": "7060012",
+    "totlmngInsttNm": "서울특별시교육청",
+    "orderInsttNm": "서울특별시중부교육청 선린중학교",
+    "orderPlanSno": "0",
+    "prcrmntMethd": "자체조달",
+    "orderMnth": "02",
+    "bizNm": "2026학년도 선린중학교 신입생 교복(동복)",
+    "cnstwkRgnNm": "",
+    "cntrctMthdNm": "제한경쟁",
+    "orderContrctAmt": "0",
+    "sumOrderAmt": "29315000",
+    "deptNm": "행정실",
+    "ofclNm": "담당자",
+    "telNo": "02-000-0000",
+    "prdctClsfcNoNm": "교복",
+    "nticeDt": "2026-09-21 16:01:50",
+    "orderPlanUntyNo": "R26DD20877187",
+    "bidNtceNoList": "R26BK01739589000",
+    "chgDt": "",
+    "orderPlanDtlUrl": "https://www.g2b.go.kr/link/PRPA015_01/single/?oderPlanNo=R26DD20877187",
+}
+LIVE_PRESPEC_SERVC = {
+    "bsnsDivNm": "일반용역",
+    "refNo": "회계과-39725",
+    "prdctClsfcNoNm": "구미동 96-3번지 상수관 정비공사 폐기물처리용역",
+    "orderInsttNm": "경기도 성남시",
+    "rlDminsttNm": "경기도 성남시",
+    "asignBdgtAmt": "65625000",
+    "rcptDt": "2026-09-21 15:04:22",
+    "opninRgstClseDt": "2026-09-28 23:59:00",
+    "bfSpecRgstNo": "R26BD00276604",
+    "specDocFileUrl1": "https://www.g2b.go.kr/pn/pnz/pnza/UntyAtchFile/downloadFile.do",
+    "rgstDt": "2026-09-20 08:43:24",
+    "bidNtceNoList": "R26BK01737975",
+    # no orderPlanUntyNo: 사전규격 responses do not carry one
+}
+LIVE_BID_CNSTWK = {
+    "bidNtceNo": "R26BK01727884",
+    "bidNtceOrd": "001",
+    "ntceKindNm": "취소공고",
+    "bidNtceDt": "2026-09-20 07:38:15",
+    "bidNtceNm": "UPS 노후부품(응급실, 수술장, 외상중환자실) 배터리교체 공사",
+    "ntceInsttCd": "B550590",
+    "ntceInsttNm": "충북대학교병원",
+    "dminsttCd": "B550590",
+    "dminsttNm": "충북대학교병원",
+    "cntrctCnclsMthdNm": "수의계약",
+    "bidClseDt": "2026-09-18 10:00:00",
+    "bdgtAmt": "76230000",  # 공사 has no asignBdgtAmt
+    "presmptPrce": "69300000",
+    "VAT": "6930000",
+    "bfSpecRgstNo": "",
+    "orderPlanUntyNo": "R26DD20870511",
+    "bidNtceDtlUrl": "https://www.g2b.go.kr/link/PNPE027_01/single/?bidPbancNo=R26BK01727884",
+    "rgstDt": "2026-09-20 07:38:15",
+}
+
+
+def test_g2b_live_order_plan_item() -> None:
+    rec = map_item("order_plan", LIVE_ORDER_PLAN_THNG)
+    assert rec is not None
+    assert rec.external_id == "R26DD20877187"
+    assert rec.published_at == date(2026, 9, 21)
+    assert rec.publisher_raw == "서울특별시중부교육청 선린중학교"
+    s = rec.structured
+    assert s["amount_krw"] == 29_315_000
+    assert (s["order_year"], s["order_month"]) == (2027, 2)
+    assert s["department"] == "행정실"
+
+
+def test_g2b_live_prespec_item() -> None:
+    rec = map_item("prespec", LIVE_PRESPEC_SERVC)
+    assert rec is not None
+    assert rec.external_id == "R26BD00276604"
+    assert rec.published_at == date(2026, 9, 21)
+    s = rec.structured
+    assert s["amount_krw"] == 65_625_000
+    assert s["bid_notice_nos"] == ["R26BK01737975"]
+    assert s["opinion_deadline"] == "2026-09-28 23:59:00"
+    assert "order_plan_no" not in s
+
+
+def test_g2b_live_construction_bid_takes_the_budget_not_the_estimate() -> None:
+    rec = map_item("bid_notice", LIVE_BID_CNSTWK)
+    assert rec is not None
+    assert rec.external_id == "R26BK01727884-001"
+    s = rec.structured
+    assert s["amount_krw"] == 76_230_000  # bdgtAmt, not presmptPrce (VAT excluded)
+    assert s["estimated_price"] == 69_300_000
+    assert s["order_plan_no"] == "R26DD20870511"
+    assert "prespec_no" not in s

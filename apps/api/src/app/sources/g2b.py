@@ -13,9 +13,11 @@ bid_notice         ad/BidPublicInfoService/getBidPblancListInfo*   ``bidNtceNo``
 Each exists per 업무구분 (용역 ``Servc`` / 물품 ``Thng`` / 공사 ``Cnstwk``). Paths live in
 :data:`OPERATIONS` and field names in :func:`map_item` — both in code, one place each (the
 provider has renamed services before: ``ad``/``ao`` prefixes arrived in 2025). The field mapping
-was written against the published specs and exercised with contract fixtures in
-``tests/unit/test_sources.py``; the dev container had no egress to data.go.kr, so run
-``manage sources check`` with a real key before the first ingest.
+was written against the published specs, exercised with contract fixtures in
+``tests/unit/test_sources.py`` and checked against the live service on 2026-09-26 (``manage
+sources check``; see ``docs/data-sources.md``). Fields the provider never fills are left alone:
+사전규격 responses carry no ``orderPlanUntyNo`` at all, and 공사 입찰공고 rarely have a
+``bfSpecRgstNo`` because 공사 사전규격 are rare.
 """
 
 from __future__ import annotations
@@ -103,18 +105,22 @@ async def fetch_page(
     rows: int = 100,
 ) -> tuple[list[dict[str, Any]], int]:
     """One page of one operation, by registration date: ``(items, totalCount)``."""
-    payload = await client.get_json(
-        path,
-        params={
-            "serviceKey": service_key,
-            "type": "json",
-            "inqryDiv": 1,
-            "inqryBgnDt": start.strftime("%Y%m%d") + "0000",
-            "inqryEndDt": end.strftime("%Y%m%d") + "2359",
-            "pageNo": page,
-            "numOfRows": rows,
-        },
-    )
+    params: dict[str, Any] = {
+        "serviceKey": service_key,
+        "type": "json",
+        "inqryDiv": 1,
+        "inqryBgnDt": start.strftime("%Y%m%d") + "0000",
+        "inqryEndDt": end.strftime("%Y%m%d") + "2359",
+        "pageNo": page,
+        "numOfRows": rows,
+    }
+    if "/OrderPlanSttusService/" in path:
+        # 발주계획 also requires the planned order month range (error 08 without it). Plans
+        # registered this week are for this year or next; a year either side misses none
+        # (live 2026-09-26: 1,152 for 2025-01~2027-12, the same as for 2020-01~2030-12).
+        params["orderBgnYm"] = f"{start.year - 1}01"
+        params["orderEndYm"] = f"{end.year + 1}12"
+    payload = await client.get_json(path, params=params)
     return _items(payload)
 
 
@@ -160,7 +166,9 @@ def map_item(doc_type: DocType, item: dict[str, Any]) -> RawRecord | None:
         ext = f"{no}-{ord_}" if no else None
         title = pick(item, "bidNtceNm")
         published = parse_compact_date(pick(item, "bidNtceDt", "rgstDt"))
-        amount = parse_int(pick(item, "asignBdgtAmt", "presmptPrce"))
+        # 용역·물품 send 배정예산 as asignBdgtAmt, 공사 as bdgtAmt (live 2026-09-26: 999/999 공사
+        # rows had only bdgtAmt); presmptPrce (추정가격) excludes VAT, so it is the last resort.
+        amount = parse_int(pick(item, "asignBdgtAmt", "bdgtAmt", "presmptPrce"))
         structured = {
             "bid_notice_no": no,
             "bid_notice_ord": ord_,
