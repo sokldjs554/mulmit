@@ -338,12 +338,14 @@ class InstitutionRegistry:
                 and inst.sigungu
                 and parsed.sigungu.endswith("구")
                 and inst.sigungu.endswith("구")
-                and len(inst.sigungu) != len(parsed.sigungu)
+                and parsed.sigungu != inst.sigungu
+                and (len(inst.sigungu) != len(parsed.sigungu) or len(parsed.sigungu) == 2)
             )
         ):
             # A misread swaps a syllable ("해운데구"); a different name ("대전 서구" → 유성구,
             # "부산 동래구" → 동구, both seen on 조달청 data) is another institution, and so is
-            # a 공단 parsed as a department ("서울시 강서구시설관리공단").
+            # a 공단 parsed as a department ("서울시 강서구시설관리공단"). In a two-syllable 구
+            # (동·서·남·북·중구) the one syllable that differs is the whole name.
             return Resolution(None, parsed.department, 0.0, "none", found.candidates)
         return found
 

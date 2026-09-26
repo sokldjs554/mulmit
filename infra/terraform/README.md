@@ -72,6 +72,7 @@ terraform destroy
 - 첫 `apply`가 "API has not been used in project … or it is disabled"로 멈추면 API 활성화가 전파되는 중입니다. 1~2분 뒤 `terraform apply`를 다시 실행하면 이어서 만듭니다.
 - `destroy`가 `google_service_networking_connection`에서 "Producer services … still using this connection"으로 멈추면, Cloud SQL 삭제가 뒤에서 끝나길 기다리는 중입니다. 5~10분 뒤 `terraform destroy`를 다시 실행하세요. 이 시점에는 과금되는 자원(Cloud SQL·Redis·Cloud Run)은 이미 지워져 있습니다.
 - 같은 프로젝트에서 일주일 안에 다시 올리면 Cloud SQL 인스턴스 이름(`app-pg16`)을 재사용할 수 없어 실패합니다. 새 프로젝트를 쓰거나 이름을 바꾸세요.
+- `destroy`는 1단계에서 켠 API를 끄지 않습니다(`disable_on_destroy = false`). 켜진 API만으로는 비용이 없고, 프로젝트를 통째로 지우려면 `gcloud projects delete <프로젝트ID>`를 씁니다.
 - `allow_destroy = true`는 Cloud SQL 삭제 보호를 끄고 원문 버킷을 비울 수 있게 합니다. 지우면 안 되는 데이터가 있는 스택에서는 켜지 마세요.
 
 ## 외부 키 켜기

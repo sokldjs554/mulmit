@@ -2,6 +2,8 @@ import pytest
 
 from app.domain.institutions import (
     SIDO_REGION_CODES,
+    Institution,
+    InstitutionRegistry,
     load_registry_csv,
     looks_like_local_government,
     parse_name,
@@ -290,3 +292,14 @@ def test_two_codes_with_one_name_keep_their_own_institutions() -> None:
     assert other.institution is None  # left for its own code to register
     # Without a code of its own (사전규격), the name still finds the first one.
     assert registry.resolve("테스트대학교 산학협력단").institution.code == "G2B-Z099001"
+
+
+def test_a_two_syllable_gu_is_never_a_typo_for_another() -> None:
+    # At the default threshold these never come close (대전 서구 vs 동구 scores 79), so check
+    # the rule itself at a looser one: one syllable apart is a different 구 when it is the
+    # whole name. The OCR-typo case for longer names is test_fuzzy_catches_ocr_typo.
+    registry = InstitutionRegistry(
+        [Institution("LG-30110", "대전광역시 동구", "local_gov", "대전광역시", "동구", "30110")]
+    )
+    assert registry.resolve("대전광역시 서구청", fuzzy_threshold=75).institution is None
+    assert registry.resolve("대전광역시 동구청", fuzzy_threshold=75).institution is not None
