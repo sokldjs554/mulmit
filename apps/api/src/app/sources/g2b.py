@@ -22,8 +22,9 @@ sources check``; see ``docs/data-sources.md``). Fields the provider never fills 
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
 from urllib.parse import unquote
@@ -200,18 +201,36 @@ def map_item(doc_type: DocType, item: dict[str, Any]) -> RawRecord | None:
     )
 
 
+@dataclass(slots=True)
+class PathStats:
+    """Per operation (업무구분) counts for one fetch, for ingest reports."""
+
+    pages: int = 0
+    items: int = 0
+    mapped: int = 0
+    total: int = 0  # sum of totalCount over the window's slices
+    seconds: float = 0.0
+    dropped_keys: list[list[str]] = field(default_factory=list)  # field names of unusable items
+
+
 class G2BAdapter:
-    def __init__(self, key: str, client: ResilientClient, service_key: str) -> None:
+    def __init__(
+        self, key: str, client: ResilientClient, service_key: str, *, rows: int = 100
+    ) -> None:
         if key not in OPERATIONS:
             raise ValueError(f"unknown g2b operation {key}")
         self.key = key
         self.doc_type = OPERATIONS[key].doc_type
         self._op = OPERATIONS[key]
-        self._client = client
+        self.client = client
         self._service_key = normalize_service_key(service_key)
+        # Items per call. The services accept up to 999; a 30-day backfill of 입찰공고 is
+        # ~20,000 rows, i.e. ~200 calls at 100 but ~25 at 999 (dev keys get 1,000 a day).
+        self.rows = rows
+        self.path_stats: dict[str, PathStats] = {p: PathStats() for p in self._op.paths}
 
     async def aclose(self) -> None:
-        await self._client.aclose()
+        await self.client.aclose()
 
     async def fetch(self, window: FetchWindow) -> AsyncIterator[RawRecord]:
         start = window.since
@@ -224,15 +243,26 @@ class G2BAdapter:
 
     async def _fetch_slice(self, path: str, start: date, end: date) -> AsyncIterator[RawRecord]:
         page = 1
-        rows = 100
+        rows = self.rows
+        stats = self.path_stats[path]
         while True:
+            started = time.perf_counter()
             items, total = await fetch_page(
-                self._client, self._service_key, path, start, end, page=page, rows=rows
+                self.client, self._service_key, path, start, end, page=page, rows=rows
             )
+            stats.seconds += time.perf_counter() - started
+            stats.pages += 1
+            stats.items += len(items)
+            if page == 1:
+                stats.total += total
             for item in items:
                 rec = map_item(self.doc_type, item)
-                if rec is not None:
-                    yield rec
+                if rec is None:
+                    if len(stats.dropped_keys) < 3:
+                        stats.dropped_keys.append(sorted(k for k, v in item.items() if v))
+                    continue
+                stats.mapped += 1
+                yield rec
             if page * rows >= total or not items:
                 break
             page += 1
