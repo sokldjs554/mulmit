@@ -16,8 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Document, IngestRun, InstitutionRow, Source
 from app.domain.institutions import (
+    PROVIDER_CODE_PREFIX,
     Institution,
     Resolution,
+    compact_name,
     looks_like_local_government,
     names_no_institution,
     provider_institution,
@@ -62,6 +64,8 @@ async def resolve_institution(
     for it with a code (조달청 수요기관코드) becomes an institution of its own, stored so the API
     can name it. Names shaped like a 지자체 are the exception: one the table misses is a gap in
     the table, so it goes to review instead of becoming a second copy of that 지자체."""
+    if not provider_code and raw and raw.strip() and not runtime.registry.knows_name(raw):
+        await _load_provider_institution_named(session, runtime, raw)
     resolution = runtime.registry.resolve(
         raw, code_hint=code_hint, sido_hint=sido_hint, provider_code=provider_code
     )
@@ -77,6 +81,38 @@ async def resolve_institution(
     inst = await _store_provider_institution(session, provider_institution(provider_code, raw))
     runtime.registry.add(inst)
     return Resolution(inst, None, 1.0, "provider")
+
+
+async def _load_provider_institution_named(
+    session: AsyncSession, runtime: Runtime, raw: str
+) -> None:
+    """A record without a code (every 사전규격) finds a coded institution by its exact name. The
+    registry only holds what this process stored itself, so look in the table too: after a
+    restart, in another worker, or in `pipeline reresolve`, the in-memory registry starts from
+    the CSV and missed 558 사전규격 of 30 days of live data (2026-09-26)."""
+    row = await session.scalar(
+        select(InstitutionRow)
+        .where(
+            InstitutionRow.code.startswith(PROVIDER_CODE_PREFIX),
+            # Stored names are normalize()d, so spaces are the only whitespace left.
+            func.replace(InstitutionRow.name, " ", "") == compact_name(raw),
+        )
+        .order_by(InstitutionRow.code)
+        .limit(1)
+    )
+    if row is not None:
+        runtime.registry.add(_institution_from_row(row))
+
+
+def _institution_from_row(row: InstitutionRow) -> Institution:
+    return Institution(
+        code=row.code,
+        name=row.name,
+        kind=row.kind,  # type: ignore[arg-type]
+        sido=row.sido,
+        sigungu=None,
+        region_code=row.region_code,
+    )
 
 
 async def _store_provider_institution(session: AsyncSession, inst: Institution) -> Institution:
@@ -97,14 +133,7 @@ async def _store_provider_institution(session: AsyncSession, inst: Institution) 
     # Another worker, or this one before a restart, may have stored it first: that row wins.
     row = await session.get(InstitutionRow, inst.code)
     assert row is not None
-    return Institution(
-        code=row.code,
-        name=row.name,
-        kind=row.kind,  # type: ignore[arg-type]
-        sido=row.sido,
-        sigungu=None,
-        region_code=row.region_code,
-    )
+    return _institution_from_row(row)
 
 
 async def reresolve_institutions(session: AsyncSession, runtime: Runtime) -> dict[str, object]:

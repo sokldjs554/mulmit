@@ -254,6 +254,9 @@ class InstitutionRegistry:
             self._alias_index[compact] = inst.code
             self._jamo_index[to_jamo(compact)] = inst.code
 
+    def knows_name(self, raw: str) -> bool:
+        return _compact(raw) in self._alias_index
+
     def __len__(self) -> int:
         return len(self._by_code)
 
@@ -370,6 +373,9 @@ class InstitutionRegistry:
 
 def _compact(text: str) -> str:
     return re.sub(r"\s+", "", normalize(text))
+
+
+compact_name = _compact
 
 
 def looks_like_local_government(raw: str) -> bool:

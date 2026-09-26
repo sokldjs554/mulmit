@@ -335,3 +335,92 @@ async def test_a_framework_contract_for_every_buyer_is_no_institution(demo_world
         await s.rollback()
     assert doc.institution_code is None
     assert stored is None
+
+
+async def test_a_codeless_prespec_finds_a_coded_institution_another_process_stored(
+    demo_world, runtime
+) -> None:  # type: ignore[no-untyped-def]
+    # The worker that stored the 공고's institution is not the one that meets the 사전규격: after
+    # a restart, in another worker, or in `pipeline reresolve`, the registry starts from the CSV.
+    prespec = map_item(
+        "prespec",
+        {
+            "bfSpecRgstNo": "R26BD90000040",
+            "prdctClsfcNoNm": "선로 전기설비 개량",
+            "rcptDt": "2026-09-15 10:00:00",
+            "orderInsttNm": "테스트철도공단",
+            "rlDminsttNm": "테스트철도공단",
+            "asignBdgtAmt": "412000000",
+        },
+    )
+    bid = map_item(
+        "bid_notice",
+        BID
+        | {
+            "bidNtceNo": "R26BK90000040",
+            "bidNtceNm": "선로 전기설비 개량",
+            "dminsttCd": "B554990",
+            "dminsttNm": "테스트철도공단",
+            "bfSpecRgstNo": "R26BD90000040",
+        },
+    )
+    assert prespec is not None and bid is not None
+    async with get_sessionmaker()() as s:
+        source = Source(key="test_g2b_restart", name="t", adapter="g2b", enabled=False, config={})
+        s.add(source)
+        await s.flush()
+        await upsert_record(
+            s, source, bid, dataclasses.replace(runtime, registry=load_registry_csv())
+        )
+        fresh = dataclasses.replace(runtime, registry=load_registry_csv())
+        doc, _ = await upsert_record(s, source, prespec, fresh)
+        method = doc.structured["institution_resolution"]
+        await s.rollback()
+    assert doc.institution_code == "G2B-B554990"
+    assert method == "exact"
+
+
+async def test_reresolve_in_a_new_process_gives_a_prespec_its_bids_institution(
+    demo_world, runtime
+) -> None:  # type: ignore[no-untyped-def]
+    # A fresh DB loads 사전규격 before 입찰공고, so a 공단 first named by a 공고 is unknown to its
+    # 사전규격 at ingest; `pipeline reresolve` runs later, in a process of its own.
+    prespec = map_item(
+        "prespec",
+        {
+            "bfSpecRgstNo": "R26BD90000041",
+            "prdctClsfcNoNm": "청사 승강기 교체",
+            "rcptDt": "2026-09-15 10:00:00",
+            "orderInsttNm": "테스트환경공단",
+            "rlDminsttNm": "테스트환경공단",
+            "asignBdgtAmt": "95000000",
+        },
+    )
+    bid = map_item(
+        "bid_notice",
+        BID
+        | {
+            "bidNtceNo": "R26BK90000041",
+            "bidNtceNm": "청사 승강기 교체",
+            "dminsttCd": "B553990",
+            "dminsttNm": "테스트환경공단",
+            "bfSpecRgstNo": "R26BD90000041",
+        },
+    )
+    assert prespec is not None and bid is not None
+    async with get_sessionmaker()() as s:
+        source = Source(key="test_g2b_later", name="t", adapter="g2b", enabled=False, config={})
+        s.add(source)
+        await s.flush()
+        ingest_rt = dataclasses.replace(runtime, registry=load_registry_csv())
+        doc, _ = await upsert_record(s, source, prespec, ingest_rt)
+        await upsert_record(s, source, bid, ingest_rt)
+        before = doc.institution_code
+        fresh = dataclasses.replace(runtime, registry=load_registry_csv())
+        report = await reresolve_institutions(s, fresh)
+        await s.refresh(doc)
+        after = doc.institution_code
+        await s.rollback()
+    assert before is None
+    assert after == "G2B-B553990"
+    assert report["resolved"] == 1
