@@ -7,7 +7,10 @@ Retry policy (per request):
 * Provider "soft errors" — data.go.kr answers *HTTP 200* with an XML ``OpenAPI_ServiceResponse``
   or a JSON ``resultCode != "00"``, and its gateway answers *HTTP 401/403* with a JSON
   ``OpenAPI_ServiceResponse`` (seen live 2026-09-26: 403 + code 30 for a service the key was not
-  applied for) — are classified by the provider's code, not the status: quota/traffic codes raise
+  applied for), and 나라장터 itself answers a bad request with *HTTP 200* and
+  ``{"nkoneps.com.response.ResponseError": {"header": {"resultCode": "08", …}}}`` (seen live
+  2026-09-26 for a missing parameter; ``_items`` would have read it as an empty page) — are
+  classified by the provider's code, not the status: quota/traffic codes raise
   :class:`QuotaExhaustedError` (reschedule, do not retry), key/parameter codes raise
   :class:`FatalSourceError` (page an operator), transient codes retry.
 * Every attempt goes through the shared rate limiter; every outcome feeds the circuit breaker.
@@ -40,7 +43,8 @@ RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
 # data.go.kr common error codes (공공데이터포털 OpenAPI 에러코드 표)
 _DGK_QUOTA_CODES = {"22"}  # LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR
 _DGK_TRANSIENT_CODES = {"01", "02", "03", "04", "05", "99"}  # app/db/http/timeout/unknown
-_DGK_FATAL_CODES = {"10", "11", "12", "20", "30", "31", "32", "33"}  # params / key problems
+# params / key problems; 06–08 are 나라장터's own (날짜 형식, 입력 범위 초과, 필수값 누락)
+_DGK_FATAL_CODES = {"06", "07", "08", "10", "11", "12", "20", "30", "31", "32", "33"}
 
 
 class FatalSourceError(Exception):
@@ -86,6 +90,16 @@ def _classify_soft_error(source: str, body: str, *, status: int | None = None) -
         if not isinstance(parsed, dict):
             return
         header = (parsed.get("response") or {}).get("header")
+        if header is None:  # 나라장터's error wrapper: {"nkoneps.com.response.ResponseError": …}
+            wrapper = next(
+                (
+                    v
+                    for k, v in parsed.items()
+                    if k.endswith("ResponseError") and isinstance(v, dict)
+                ),
+                {},
+            )
+            header = wrapper.get("header")
         gateway = (parsed.get("OpenAPI_ServiceResponse") or {}).get("cmmMsgHeader")
         if isinstance(gateway, dict) and gateway.get("returnReasonCode") is not None:
             code = str(gateway["returnReasonCode"])
