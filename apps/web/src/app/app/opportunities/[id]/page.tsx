@@ -13,7 +13,7 @@ import { StageRail } from "@/components/opportunity/stage-rail";
 import { Button } from "@/components/ui/button";
 import { Badge, Card, CardHeader, ErrorNote, Skeleton } from "@/components/ui/primitives";
 import { useToast } from "@/components/ui/toast";
-import { ApiError, type Schemas } from "@/lib/api/client";
+import { ApiError, newIdempotencyKey, type Schemas } from "@/lib/api/client";
 import { useCreateBrief, useFeedback, useMe, useOpportunity } from "@/lib/api/hooks";
 import { formatDate, formatDateTime, formatKRW, formatPercent, formatWindow, leadLabel } from "@/lib/format";
 import { STATUS_LABEL } from "@/lib/utils";
@@ -69,7 +69,7 @@ function Briefs({ detail }: { detail: Schemas["OpportunityDetail"] }) {
             loading={create.isPending}
             disabled={balance < 3}
             onClick={() =>
-              create.mutate(undefined, {
+              create.mutate(newIdempotencyKey("brief"), {
                 onSuccess: () => toast("good", "브리핑을 만들었어요. 크레딧 3개를 썼어요."),
                 onError: (e) =>
                   toast(
