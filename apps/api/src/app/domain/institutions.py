@@ -402,8 +402,8 @@ def provider_institution(code: str, name: str) -> Institution:
     kind: InstitutionKind
     if name.endswith(("교육청", "교육지원청")):
         kind = "education_office"
-    elif head.endswith(("부", "처", "청")) and "교육" not in head:
-        kind = "central"  # 조달청, 국토교통부 …, 국회사무처
+    elif head.endswith(("부", "처", "청")) and "교육" not in head and not head.endswith("본부"):
+        kind = "central"  # 조달청, 국토교통부 …, 국회사무처; not "경기도소방재난본부"
     else:
         kind = "public_agency"  # 학교, 병원, 대학교, 공사·공단, 연구원
     m = _SIDO_RE.match(name)

@@ -213,6 +213,7 @@ def test_same_name_in_two_provinces_is_not_guessed(registry) -> None:  # type: i
         ("조달청", "central", "", ""),
         ("국토교통부 부산지방국토관리청", "central", "", ""),
         ("경기도화성오산교육지원청", "education_office", "경기도", "41"),
+        ("경기도소방재난본부", "public_agency", "경기도", "41"),  # 본부 ends in 부, no 부처
     ],
 )
 def test_provider_institution_reads_kind_and_sido_off_the_name(
