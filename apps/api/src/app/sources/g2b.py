@@ -88,6 +88,33 @@ def _items(payload: Any) -> tuple[list[dict[str, Any]], int]:
     return [i for i in items if isinstance(i, dict)], total
 
 
+# Amounts under this are placeholders, not budgets: on 30 days of live data (2026-09-26) 2% of
+# rows said 0, 1, 10 or 70원, mostly 단가계약 and undisclosed budgets ("…방수공사" at 10원).
+# As a budget they would rank and link as if the project were free.
+MIN_AMOUNT_KRW = 10_000
+
+
+def _amount(item: dict[str, Any], *names: str) -> int | None:
+    """First field among ``names`` holding a real amount; "0" or "1" falls through to the next
+    (a 공고 with ``asignBdgtAmt`` "0" can still carry ``presmptPrce``)."""
+    for name in names:
+        value = parse_int(item.get(name))
+        if value is not None and value >= MIN_AMOUNT_KRW:
+            return value
+    return None
+
+
+def _bid_numbers(value: Any) -> list[str]:
+    """``bidNtceNoList`` → bid numbers. 사전규격 send "R26BK01702619,R26BK01717858"; 발주계획
+    append the 3-digit 차수 ("R26BK01739589000"), which is dropped so both match ``bidNtceNo``."""
+    out: list[str] = []
+    for raw in str(value or "").replace(" ", "").split(","):
+        no = raw[:-3] if len(raw) == 16 and raw[-3:].isdigit() and raw[:3].isalnum() else raw
+        if no and no not in out:
+            out.append(no)
+    return out
+
+
 def normalize_service_key(key: str) -> str:
     """공공데이터포털 shows each key twice: "Encoding" (``%2B``…) and "Decoding" (``+``…).
     httpx encodes query values itself, so the Encoding form would be encoded a second time and
@@ -131,12 +158,14 @@ def map_item(doc_type: DocType, item: dict[str, Any]) -> RawRecord | None:
         ext = pick(item, "orderPlanUntyNo", "orderPlanNo")
         title = pick(item, "bizNm", "prdctClsfcNoNm", "cnstwkNm")
         published = parse_compact_date(pick(item, "nticeDt", "rgstDt", "chgDt"))
-        amount = parse_int(pick(item, "sumOrderAmt", "orderAmt", "asignBdgtAmt"))
+        amount = _amount(item, "sumOrderAmt", "orderAmt", "asignBdgtAmt")
         structured = {
             "order_plan_no": ext,
             "amount_krw": amount,
             "order_year": parse_int(pick(item, "orderYear")),
             "order_month": parse_int(pick(item, "orderMnth")),
+            # 72% of live plans (2026-09-26) already name the 공고 they became.
+            "bid_notice_nos": _bid_numbers(pick(item, "bidNtceNoList")),
             "contract_method": pick(item, "cntrctMthdNm"),
             "department": pick(item, "deptNm", "orderInsttDeptNm"),
             "contact": pick(item, "ofclNm"),
@@ -148,14 +177,13 @@ def map_item(doc_type: DocType, item: dict[str, Any]) -> RawRecord | None:
         ext = pick(item, "bfSpecRgstNo")
         title = pick(item, "prdctClsfcNoNm", "bfSpecNm", "bizNm")
         published = parse_compact_date(pick(item, "rcptDt", "rgstDt"))
-        amount = parse_int(pick(item, "asignBdgtAmt"))
-        bid_list = pick(item, "bidNtceNoList") or ""
+        amount = _amount(item, "asignBdgtAmt")
         structured = {
             "prespec_no": ext,
             "amount_krw": amount,
             "opinion_deadline": str(pick(item, "opninRgstClseDt") or "") or None,
             "order_plan_no": pick(item, "orderPlanUntyNo"),
-            "bid_notice_nos": [b for b in str(bid_list).replace(" ", "").split(",") if b],
+            "bid_notice_nos": _bid_numbers(pick(item, "bidNtceNoList")),
             "spec_url": pick(item, "specDocFileUrl1"),
             "department": pick(item, "orderInsttDeptNm"),
         }
@@ -169,12 +197,12 @@ def map_item(doc_type: DocType, item: dict[str, Any]) -> RawRecord | None:
         published = parse_compact_date(pick(item, "bidNtceDt", "rgstDt"))
         # 용역·물품 send 배정예산 as asignBdgtAmt, 공사 as bdgtAmt (live 2026-09-26: 999/999 공사
         # rows had only bdgtAmt); presmptPrce (추정가격) excludes VAT, so it is the last resort.
-        amount = parse_int(pick(item, "asignBdgtAmt", "bdgtAmt", "presmptPrce"))
+        amount = _amount(item, "asignBdgtAmt", "bdgtAmt", "presmptPrce")
         structured = {
             "bid_notice_no": no,
             "bid_notice_ord": ord_,
             "amount_krw": amount,
-            "estimated_price": parse_int(pick(item, "presmptPrce")),
+            "estimated_price": _amount(item, "presmptPrce"),
             "bid_close_at": str(pick(item, "bidClseDt") or "") or None,
             "prespec_no": pick(item, "bfSpecRgstNo"),
             "order_plan_no": pick(item, "orderPlanUntyNo"),

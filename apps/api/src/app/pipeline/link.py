@@ -146,6 +146,17 @@ async def _reference_match(session: AsyncSession, signal: Signal) -> int | None:
         )
         if opp_id is not None:
             return int(opp_id)
+    # …and so do 발주계획, often registered after the 공고 is already out (72% of live plans
+    # named their bid; 2026-09-26), so look the other way too.
+    for no in signal.external_refs.get("bid_notice_nos") or ():
+        opp_id = await session.scalar(
+            select(OpportunitySignal.opportunity_id)
+            .join(Signal, Signal.id == OpportunitySignal.signal_id)
+            .where(Signal.id != signal.id, Signal.external_refs.contains({"bid_notice_no": no}))
+            .limit(1)
+        )
+        if opp_id is not None:
+            return int(opp_id)
     return None
 
 

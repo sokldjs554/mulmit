@@ -81,6 +81,7 @@ class ParsedName:
     is_education: bool
     department: str | None
     key: str
+    sido_only: bool = False  # the name is the 시도 itself (plus its own departments)
 
 
 @dataclass(slots=True)
@@ -121,6 +122,11 @@ def parse_name(raw: str) -> ParsedName:
         tok_clean = tok.replace("의회", "")
         # "강남구청장", "성남시장", "영월군수" name the institution through its head.
         tok_clean = re.sub(r"^([가-힣]{1,5}(?:구|시|군))(?:청장|장|수)$", r"\1", tok_clean)
+        if tok_clean in _SIDO_LOOKUP and sido and _SIDO_LOOKUP[tok_clean] != sido:
+            # "경기도 광주시" is a 시 in 경기도, not 광주광역시 (seen on 조달청 data).
+            if not sigungu and tok_clean.endswith("시"):
+                sigungu = tok_clean
+            continue
         if tok_clean in _SIDO_LOOKUP or not tok_clean:
             continue
         if _DEPT_SUFFIX_RE.match(tok_clean) and not re.search(r"(?:시|군|구)(?:청)?$", tok_clean):
@@ -153,7 +159,39 @@ def parse_name(raw: str) -> ParsedName:
     key = re.sub(r"\s+", "", f"{sido or ''}{sigungu or ''}{'의회' if is_council else ''}")
     if not key:
         key = re.sub(r"\s+", "", text)
-    return ParsedName(raw, sido, sigungu, is_council, is_education, department, key)
+    return ParsedName(
+        raw, sido, sigungu, is_council, is_education, department, key, _is_sido_only(text, sido)
+    )
+
+
+# Bodies of their own that often follow a 시도 name: "경기도 신성중학교", "서울시 강서구시설관리공단".
+_NOT_SIDO_OFFICE = ("학교", "공사", "공단", "조합")
+
+
+def _leading_sido(text: str) -> str | None:
+    """The 시도 when the name *starts* with one as a word ("경기도 …", "서울시청 …"). The ``sido``
+    found by searching anywhere is looser: "해운대구" contains 대구, "서울교통공사" 서울."""
+    tokens = text.split()
+    if not tokens:
+        return None
+    head = tokens[0].replace("의회", "")
+    if head.endswith("청") and head[:-1] in _SIDO_LOOKUP:
+        head = head[:-1]
+    return _SIDO_LOOKUP.get(head)
+
+
+def _is_sido_only(text: str, sido: str | None) -> bool:
+    """ "경기도", "서울시청 스마트도시과", "서울특별시 영등포소방서": the 시도 and its own offices.
+    Not "서울교통공사", "부산대학교 산학협력단" or "국토교통부 부산지방국토관리청 …", which only carry
+    a place name, and not "경기도 신성중학교" (the 교육청's) or a 구's 시설관리공단. On 30 days of
+    조달청 data (2026-09-26) names like these were most of what resolved to a 시도, all to the
+    wrong demand owner."""
+    if sido is None or _leading_sido(text) != sido:
+        return False
+    return not any(
+        any(w in t for w in _NOT_SIDO_OFFICE) or _SIDO_LOOKUP.get(t, sido) != sido
+        for t in text.split()[1:]
+    )
 
 
 class InstitutionRegistry:
@@ -222,7 +260,7 @@ class InstitutionRegistry:
                 return Resolution(
                     None, parsed.department, 0.0, "ambiguous", [(i.code, 1.0) for i in pool]
                 )
-        elif parsed.sido and not parsed.is_education:
+        elif parsed.sido_only and not parsed.is_education:
             # "경기도" alone, or "제주특별자치도 관광정책과".
             wanted_sido: InstitutionKind = "council" if parsed.is_council else "local_gov"
             sido_level = [
@@ -233,7 +271,24 @@ class InstitutionRegistry:
             if len(sido_level) == 1:
                 return Resolution(sido_level[0], parsed.department, 0.95, "exact")
 
-        return self._fuzzy(compact, parsed.department, fuzzy_threshold)
+        found = self._fuzzy(compact, parsed.department, fuzzy_threshold)
+        inst = found.institution
+        if inst is not None and (
+            (parsed.department and any(w in parsed.department for w in _NOT_SIDO_OFFICE))
+            or ((lead := _leading_sido(normalize(raw))) is not None and inst.sido != lead)
+            or (
+                parsed.sigungu
+                and inst.sigungu
+                and parsed.sigungu.endswith("구")
+                and inst.sigungu.endswith("구")
+                and len(inst.sigungu) != len(parsed.sigungu)
+            )
+        ):
+            # A misread swaps a syllable ("해운데구"); a different name ("대전 서구" → 유성구,
+            # "부산 동래구" → 동구, both seen on 조달청 data) is another institution, and so is
+            # a 공단 parsed as a department ("서울시 강서구시설관리공단").
+            return Resolution(None, parsed.department, 0.0, "none", found.candidates)
+        return found
 
     def _fuzzy(self, compact: str, department: str | None, threshold: float) -> Resolution:
         # Compare at jamo level so one-jamo OCR slips (대→데) cost little. Strip the department

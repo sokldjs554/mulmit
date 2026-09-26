@@ -10,6 +10,8 @@ from app.sources.base import FetchWindow
 from app.sources.g2b import G2BAdapter, map_item
 from app.sources.http import FatalSourceError, ResilientClient, TransientSourceError
 from app.sources.resilience import (
+    BudgetedLimiter,
+    CallBudgetExhaustedError,
     CircuitOpenError,
     MemoryBreaker,
     MemoryLimiter,
@@ -349,3 +351,100 @@ def test_g2b_live_construction_bid_takes_the_budget_not_the_estimate() -> None:
     assert s["estimated_price"] == 69_300_000
     assert s["order_plan_no"] == "R26DD20870511"
     assert "prespec_no" not in s
+
+
+# Shapes seen in 30 days of live data (2026-08-28 ~ 2026-09-26, 57,514 rows); values trimmed.
+def test_g2b_placeholder_amounts_are_not_budgets() -> None:
+    # 단가계약 and undisclosed budgets send 0, 1, 10원…; a 0 must not hide a real estimate.
+    unit_price = LIVE_BID_CNSTWK | {"bidNtceNm": "학생생활관 방수공사", "bdgtAmt": "10"}
+    unit_price |= {"presmptPrce": "1"}
+    rec = map_item("bid_notice", unit_price)
+    assert rec is not None
+    assert "amount_krw" not in rec.structured
+    assert "estimated_price" not in rec.structured
+
+    zero_budget = LIVE_BID_CNSTWK | {"bdgtAmt": "0", "presmptPrce": "69300000"}
+    rec = map_item("bid_notice", zero_budget)
+    assert rec is not None and rec.structured["amount_krw"] == 69_300_000
+
+    plan = map_item("order_plan", LIVE_ORDER_PLAN_THNG | {"sumOrderAmt": "1"})
+    assert plan is not None and "amount_krw" not in plan.structured
+
+
+def test_g2b_bid_number_lists_match_bid_numbers() -> None:
+    # 발주계획 append the 3-digit 차수; 사전규격 do not; both can list several.
+    plan = map_item(
+        "order_plan",
+        LIVE_ORDER_PLAN_THNG | {"bidNtceNoList": "R26BK01739589000,R26BK01702619001"},
+    )
+    assert plan is not None
+    assert plan.structured["bid_notice_nos"] == ["R26BK01739589", "R26BK01702619"]
+    spec = map_item(
+        "prespec", LIVE_PRESPEC_SERVC | {"bidNtceNoList": "R26BK01735175,R26BK01717757"}
+    )
+    assert spec is not None
+    assert spec.structured["bid_notice_nos"] == ["R26BK01735175", "R26BK01717757"]
+    empty = map_item("prespec", LIVE_PRESPEC_SERVC | {"bidNtceNoList": ""})
+    assert empty is not None and "bid_notice_nos" not in empty.structured
+
+
+async def test_g2b_adapter_counts_calls_per_operation() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        page = int(request.url.params["pageNo"])
+        n = int(request.url.params["numOfRows"])
+        items = [
+            LIVE_BID_CNSTWK | {"bidNtceNo": f"R26BK{page:03d}{i:05d}"}
+            for i in range(n if page == 1 else 2)
+        ]
+        items.append({"bidNtceNm": "번호 없는 행"})  # unusable: counted, not stored
+        body = {
+            "response": {
+                "header": {"resultCode": "00"},
+                "body": {"items": items, "totalCount": n + 2},
+            }
+        }
+        return httpx.Response(200, json=body)
+
+    adapter = G2BAdapter("g2b_bid", _client(handler), "KEY", rows=999)
+    records = [r async for r in adapter.fetch(FetchWindow(date(2026, 9, 20), date(2026, 9, 26)))]
+    assert len(records) == 3 * (999 + 2)
+    stats = adapter.path_stats["/ad/BidPublicInfoService/getBidPblancListInfoCnstwk"]
+    assert (stats.pages, stats.total, stats.mapped, stats.items) == (2, 1001, 1001, 1003)
+    assert stats.dropped_keys == [["bidNtceNm"], ["bidNtceNm"]]
+    assert adapter.client.stats["attempts"] == 6
+
+
+async def test_client_counts_retries_and_errors_by_kind() -> None:
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.ConnectTimeout("")
+        if calls["n"] == 2:
+            return httpx.Response(503)
+        return httpx.Response(200, json={"response": {"header": {"resultCode": "00"}, "body": {}}})
+
+    client = _client(handler, max_attempts=4)
+    await client.get_json("/x")
+    assert dict(client.stats) == {
+        "attempts": 3,
+        "retries": 2,
+        "error:ConnectTimeout": 1,
+        "error:HTTP 503": 1,
+    }
+    quota = _client(lambda r: httpx.Response(200, text=DATA_GO_KR_QUOTA_XML))
+    with pytest.raises(QuotaExhaustedError):
+        await quota.get_json("/x")
+    assert quota.stats["error:quota"] == 1
+
+
+async def test_budgeted_limiter_stops_a_run_before_the_shared_quota() -> None:
+    shared = MemoryLimiter(daily_quota={"g2b_bid": 1000})
+    run = BudgetedLimiter(shared, budget=2)
+    await run.acquire("g2b_bid")
+    await run.acquire("g2b_bid")
+    with pytest.raises(CallBudgetExhaustedError):
+        await run.acquire("g2b_bid")
+    assert run.calls == {"g2b_bid": 2}
+    assert shared.calls == {"g2b_bid": 2}  # the refused call did not count against the day
