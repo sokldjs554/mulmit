@@ -7,6 +7,8 @@ manage eval all --record          # extraction / linking / OCR / realistic-set e
 manage eval llm --dry-run         # Claude model × effort comparison on the hand-written set
 manage bench --report ../../docs/performance.md   # hot-query plans at volume
 manage sources check              # first real call to each 조달청 operation (needs the data.go.kr key)
+manage sources ingest -s g2b --days 30 --max-calls 250   # backfill a window, counting calls
+manage pipeline run               # process pending documents and link their signals
 manage worker                     # arq worker + cron (+ /healthz on $PORT for Cloud Run)
 manage openapi > openapi.json     # schema for the web app's generated types
 """
@@ -33,10 +35,12 @@ db_app = typer.Typer(help="Database")
 demo_app = typer.Typer(help="Synthetic demo world")
 eval_app = typer.Typer(help="Evaluations")
 sources_app = typer.Typer(help="External data sources")
+pipeline_app = typer.Typer(help="Pipeline stages outside the worker")
 app.add_typer(db_app, name="db")
 app.add_typer(demo_app, name="demo")
 app.add_typer(eval_app, name="eval")
 app.add_typer(sources_app, name="sources")
+app.add_typer(pipeline_app, name="pipeline")
 
 T = TypeVar("T")
 
@@ -257,6 +261,74 @@ def sources_check(
     if issues := problems(checks):
         typer.echo(f"{len(issues)} problem(s); see the report", err=True)
         raise typer.Exit(1)
+
+
+@sources_app.command("ingest")
+def sources_ingest(
+    source: list[str] = typer.Option(
+        ..., "--source", "-s", help="Source key, or an adapter name for all its sources (g2b)"
+    ),
+    days: int = typer.Option(30, min=1, max=366, help="Window: this many days up to --until"),
+    until: str = typer.Option(None, help="Last day of the window (YYYY-MM-DD, default today KST)"),
+    rows: int = typer.Option(None, min=1, max=999, help="Items per call (조달청; default 100)"),
+    max_calls: int = typer.Option(
+        None, min=1, help="Stop a source after this many calls (retries count)"
+    ),
+    report: Path = typer.Option(None, help="Also write the JSON report here"),
+) -> None:
+    """Backfill sources over a window through the real adapters, as the worker's ingest_source
+    job would, and report calls, retries, errors and rows per operation. Re-running the same
+    window is safe: documents are upserted by (source, external_id) and unchanged ones skipped.
+    Processing is separate: `manage pipeline run`."""
+    from datetime import timedelta
+
+    from app.pipeline.backfill import ingest_window, resolve_source_keys
+    from app.sources.base import FetchWindow
+
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
+    last = date.fromisoformat(until) if until else today_kst()
+    window = FetchWindow(last - timedelta(days=days - 1), last)
+
+    async def go(session: Any, runtime: Any) -> list[dict[str, Any]]:
+        try:
+            sources = await resolve_source_keys(session, source)
+        except LookupError as exc:
+            raise typer.BadParameter(str(exc), param_hint="--source") from exc
+        return await ingest_window(
+            session, runtime, sources, window, rows=rows, max_calls=max_calls
+        )
+
+    reports = _run(lambda: _with_session(go))
+    for r in reports:
+        typer.echo(
+            f"{r['source']:<16} {r['status']:<9} calls={r['calls']} "
+            f"fetched={r.get('fetched', 0)} created={r.get('created', 0)} "
+            f"updated={r.get('updated', 0)} skipped={r.get('skipped', 0)} {r['seconds']}s"
+            + (f"  {r['error']}" if r["error"] else ""),
+            err=True,
+        )
+    out = json.dumps(reports, ensure_ascii=False, indent=2, default=str)
+    if report is not None:
+        report.write_text(out + "\n", encoding="utf-8")
+    typer.echo(out)
+    if any(r["error"] for r in reports):
+        raise typer.Exit(1)
+
+
+@pipeline_app.command("run")
+def pipeline_run(
+    limit: int = typer.Option(None, min=1, help="Process at most this many documents"),
+) -> None:
+    """Process every pending document (parse → extract → verify → signals) and link the new
+    signals into opportunities: the worker's process_document → link_signals chain in-process."""
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
+
+    async def go(session: Any, runtime: Any) -> dict[str, Any]:
+        from app.pipeline.backfill import process_pending
+
+        return await process_pending(session, runtime, limit=limit)
+
+    typer.echo(json.dumps(_run(lambda: _with_session(go)), ensure_ascii=False, indent=2))
 
 
 @app.command()

@@ -16,7 +16,7 @@ In-memory implementations with the same interface keep unit tests hermetic.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol
 
@@ -37,6 +37,15 @@ class CircuitOpenError(Exception):
         super().__init__(f"circuit open for {source}; retry after {retry_after:.0f}s")
         self.source = source
         self.retry_after = retry_after
+
+
+class CallBudgetExhaustedError(Exception):
+    """A one-off run (``manage sources ingest --max-calls``) used the calls it was given."""
+
+    def __init__(self, source: str, budget: int) -> None:
+        super().__init__(f"call budget of {budget} used up for {source}")
+        self.source = source
+        self.budget = budget
 
 
 def next_kst_midnight(now: datetime | None = None) -> datetime:
@@ -156,6 +165,26 @@ class RedisBreaker:
         opened_until = float(out.get("opened_until", 0) or 0)
         out["state"] = "open" if opened_until > time.time() else "closed"
         return out
+
+
+@dataclass(slots=True)
+class BudgetedLimiter:
+    """Wraps the shared limiter with a per-run cap and counts what this run spent.
+
+    The provider's daily quota (above) protects the key for the whole fleet; this protects a
+    backfill from spending all of it. The cap is checked before the shared limiter so a refused
+    call does not count against the day either."""
+
+    inner: Limiter
+    budget: int | None = None
+    calls: dict[str, int] = field(default_factory=dict)
+
+    async def acquire(self, source: str) -> None:
+        used = self.calls.get(source, 0)
+        if self.budget is not None and used >= self.budget:
+            raise CallBudgetExhaustedError(source, self.budget)
+        await self.inner.acquire(source)
+        self.calls[source] = used + 1
 
 
 # --------------------------------------------------------------------------------------------

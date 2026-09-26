@@ -103,7 +103,10 @@ def build_adapter(source: Source, runtime: Runtime) -> SourceAdapter:
         if not s.data_go_kr_service_key:
             raise FatalSourceError("APP_DATA_GO_KR_SERVICE_KEY is not configured")
         return g2b.G2BAdapter(
-            source.key, client(g2b.BASE_URL), s.data_go_kr_service_key.get_secret_value()
+            source.key,
+            client(g2b.BASE_URL),
+            s.data_go_kr_service_key.get_secret_value(),
+            rows=int(source.config.get("rows", 100)),
         )
     if source.adapter == "clik":
         if not s.clik_api_key:

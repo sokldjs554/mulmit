@@ -22,6 +22,7 @@ import asyncio
 import json
 import random
 import re
+from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
@@ -66,6 +67,17 @@ class TransientSourceError(Exception):
 def _describe(exc: Exception) -> str:
     """httpx raises ``ConnectTimeout('')``/``ReadError('')`` — keep at least the type."""
     return str(exc) or type(exc).__name__
+
+
+def _kind(exc: Exception) -> str:
+    """Short, key-free label for counting failures: ``ConnectTimeout``, ``HTTP 503``,
+    ``provider 22``…"""
+    if isinstance(exc, QuotaExhaustedError):
+        return "quota"
+    m = re.search(r"(HTTP \d{3}|provider error \d+)", str(exc))
+    if m and isinstance(exc, (FatalSourceError, TransientSourceError)):
+        return m.group(1).replace("provider error", "provider")
+    return type(exc).__name__
 
 
 def _classify_soft_error(source: str, body: str, *, status: int | None = None) -> None:
@@ -144,6 +156,9 @@ class ResilientClient:
         self._base_delay = base_delay
         self._max_delay = max_delay
         self._sleep = sleep
+        # What this client did, for ingest reports: ``attempts`` (every try, including ones
+        # that never reached the provider), ``retries``, and one ``error:<kind>`` per failure.
+        self.stats: Counter[str] = Counter()
         self._client = httpx.AsyncClient(
             base_url=base_url,
             timeout=httpx.Timeout(timeout, connect=5.0),
@@ -179,6 +194,7 @@ class ResilientClient:
         for attempt in range(self._max_attempts):
             await self._breaker.before_call(self.source)
             await self._limiter.acquire(self.source)
+            self.stats["attempts"] += 1
             retry_after: str | None = None
             try:
                 if max_bytes is None:
@@ -211,13 +227,16 @@ class ResilientClient:
                     _classify_soft_error(self.source, resp.text)
                 await self._breaker.record_success(self.source)
                 return resp
-            except (QuotaExhaustedError, FatalSourceError, ResponseTooLargeError):
+            except (QuotaExhaustedError, FatalSourceError, ResponseTooLargeError) as exc:
+                self.stats[f"error:{_kind(exc)}"] += 1
                 raise
             except (httpx.TimeoutException, httpx.TransportError, TransientSourceError) as exc:
                 last_exc = exc
+                self.stats[f"error:{_kind(exc)}"] += 1
                 await self._breaker.record_failure(self.source)
                 if attempt + 1 >= self._max_attempts:
                     break
+                self.stats["retries"] += 1
                 delay = self._backoff(attempt, retry_after)
                 log.warning(
                     "source.retry",

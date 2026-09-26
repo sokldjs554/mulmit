@@ -24,6 +24,8 @@
 | 사전규격 | 883 | 724 | 43 | 없음 |
 | 입찰공고 | 2,010 | 1,756 | 1,416 | 공사는 `asignBdgtAmt` 대신 `bdgtAmt`로 예산을 줌 → 금액 매핑에 추가(전에는 부가세 빠진 `presmptPrce`로 떨어짐) |
 
+**같은 날 30일치 적재** ([`real-data-run.md`](real-data-run.md)): 57,514건을 91회 호출로 받았고(한 번에 999건), 같은 기간을 다시 적재하면 전부 건너뜁니다. 여기서 1만 원 미만 자리표시 금액, 발주계획의 `bidNtceNoList`(차수 세 자리가 붙음), 사전규격에 부서 필드가 없다는 것을 확인했습니다.
+
 채움 비율이 낮은 필드는 필드명 문제가 아니라 원래 비어 있는 값입니다. 사전규격 응답에는 `orderPlanUntyNo` 필드 자체가 없어 발주계획번호가 0%이고(사전규격→발주계획 연결은 번호가 아니라 유사도로), 공사 입찰공고의 `bfSpecRgstNo`는 1,000건 중 19건만 차 있습니다(공사 사전규격 자체가 주 43건). 수의계약 공고 일부는 `bidClseDt`가 비어 있습니다.
 
 키를 처음 넣었을 때는 파이프라인을 돌리기 전에 점검 명령부터 실행합니다. 데이터베이스 없이 조달청 오퍼레이션 9개(발주계획·사전규격·입찰공고 × 용역·물품·공사)를 최근 7일로 한 번씩 호출하고, 결과를 `docs/source-check.md`에 씁니다.
@@ -66,7 +68,7 @@ WHERE key = 'clik_minutes';
 
 | 유형 | 경로 | 외부 ID | 연결에 쓰는 필드 |
 |---|---|---|---|
-| 발주계획 | `/ao/OrderPlanSttusService/getOrderPlanSttusList{Servc,Thng,Cnstwk}` | `orderPlanUntyNo` | `bizNm`, `sumOrderAmt`, `orderYear`·`orderMnth`, `orderInsttNm`, `deptNm` |
+| 발주계획 | `/ao/OrderPlanSttusService/getOrderPlanSttusList{Servc,Thng,Cnstwk}` | `orderPlanUntyNo` | `bizNm`, `sumOrderAmt`, `orderYear`·`orderMnth`, `orderInsttNm`, `deptNm`, `bidNtceNoList`(차수 붙음) |
 | 사전규격 | `/ao/HrcspSsstndrdInfoService/getPublicPrcureThngInfo{Servc,Thng,Cnstwk}` | `bfSpecRgstNo` | `prdctClsfcNoNm`, `asignBdgtAmt`, `bidNtceNoList`, `rlDminsttNm` (`orderPlanUntyNo`는 응답에 없음) |
 | 입찰공고 | `/ad/BidPublicInfoService/getBidPblancListInfo{Servc,Thng,Cnstwk}` | `bidNtceNo`-`bidNtceOrd` | `bidNtceNm`, `asignBdgtAmt`(공사는 `bdgtAmt`)/`presmptPrce`, `bfSpecRgstNo`, `orderPlanUntyNo`, `dminsttNm` |
 
