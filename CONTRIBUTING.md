@@ -2,8 +2,8 @@
 
 ## 브랜치 전략: 짧게 사는 브랜치 + 트렁크
 
-- `main`은 항상 배포 가능한 상태입니다. 변경은 PR로만 병합하고, CI 5개 잡(API·Web·Terraform·Docker 이미지 2개)이 PR의 최신 커밋에서 통과해야 병합합니다. base가 앞서 있으면 main을 병합해 CI를 다시 돌린 뒤 병합합니다.
-- 권장 저장소 설정(Settings → Branches → `main`): "Require a pull request before merging", "Require status checks to pass"에 위 5개 잡.
+- `main`은 항상 배포 가능한 상태입니다. 변경은 PR로만 병합하고, CI 6개 잡(API·Web·E2E·Terraform·Docker 이미지 2개)이 PR의 최신 커밋에서 통과해야 병합합니다. base가 앞서 있으면 main을 병합해 CI를 다시 돌린 뒤 병합합니다.
+- 권장 저장소 설정(Settings → Branches → `main`): "Require a pull request before merging", "Require status checks to pass"에 위 6개 잡.
 - 작업 브랜치는 `feat/…`, `fix/…`, `chore/…`, `docs/…`처럼 목적을 앞에 두고, 가능하면 하루~이틀 안에 병합합니다. 오래 걸리는 기능은 플래그나 작은 단위로 나눠 먼저 병합합니다.
 - 병합은 **squash merge**. PR 제목이 곧 커밋 메시지이므로 Conventional Commits 형식을 따릅니다.
 - 릴리스는 `main`에서 `vX.Y.Z` 태그를 푸시하면 [배포 워크플로](.github/workflows/deploy.yml)가 돕니다. 되돌릴 때는 이전 리비전으로 트래픽을 옮기고([런북](docs/runbook.md)), 수정은 새 PR로 합니다.
@@ -20,6 +20,7 @@ docs(adr): 0004 postgres-only search
 
 ## PR 체크리스트
 - [ ] 로컬에서 `make lint test` 통과
+- [ ] 화면 흐름(로그인·피드·상세·브리핑·운영 콘솔)을 바꿨으면 `make e2e` 통과. 선택자가 바뀌면 `apps/web/e2e/`도 같이 고칩니다
 - [ ] 파이프라인·프롬프트·파서·랭킹 변경이면 `manage eval all` 전후 수치 첨부 (프롬프트·모델 설정 변경은 `make eval-llm` 비교표도)
 - [ ] API 스키마 변경이면 `make gen-api` 결과 커밋
 - [ ] 마이그레이션이 있으면 직전 버전 코드와 호환(확장 → 배포 → 축소), 인덱스는 `CONCURRENTLY`
