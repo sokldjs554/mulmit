@@ -51,12 +51,16 @@ def _handler(request: httpx.Request) -> httpx.Response:
         return _ok([ORDER_PLAN, ORDER_PLAN | {"sumOrderAmt": None, "deptNm": None}])
     if "BidPublicInfoService" in path:
         return _ok([BID_RENAMED])
-    # 사전규격: the key was never applied for on this service
+    # 사전규격: the key was never applied for on this service — the live gateway's answer
     return httpx.Response(
-        200,
+        403,
         json={
-            "response": {
-                "header": {"resultCode": "30", "resultMsg": "SERVICE_KEY_IS_NOT_REGISTERED_ERROR"}
+            "OpenAPI_ServiceResponse": {
+                "cmmMsgHeader": {
+                    "errMsg": "SERVICE_KEY_IS_NOT_REGISTERED_ERROR",
+                    "returnAuthMsg": "등록되지 않은 서비스키",
+                    "returnReasonCode": "30",
+                }
             }
         },
     )
@@ -81,10 +85,13 @@ async def test_reports_coverage_renames_and_provider_errors() -> None:
 
     prespec = by_source["g2b_prespec"][0]
     assert not prespec.ok
-    assert prespec.error and "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" in prespec.error
+    assert prespec.error and "30 SERVICE_KEY_IS_NOT_REGISTERED_ERROR" in prespec.error
 
     report = render(checks, days=7)
     assert "bidNtceTitle" in report and "실패" in report
+    assert "## 활용신청이 필요한 서비스" in report
+    assert "조달청_나라장터 사전규격정보서비스" in report
+    assert "발주계획현황서비스" not in report  # that one answered
 
 
 async def test_the_key_never_appears_in_errors() -> None:
