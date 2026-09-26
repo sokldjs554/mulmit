@@ -31,12 +31,14 @@ from app.clock import today_kst
 from app.db.models import Opportunity, OpportunitySignal, Signal
 from app.domain.embedding import cosine
 from app.domain.stages import (
+    CANCELS_KEY,
     COMMITMENT_MULTIPLIER,
     STAGE_ORDER,
     STAGE_PRIOR,
     Stage,
     forecast_bid_window,
     tender_is_out,
+    withdrawn_bids,
 )
 from app.domain.synonyms import canonical_terms, canonicalize
 from app.domain.text import char_ngrams, jaccard
@@ -135,9 +137,18 @@ async def _reference_match(session: AsyncSession, signal: Signal) -> int | None:
         )
         if opp_id is not None:
             return int(opp_id)
-    # A 사전규격 lists the bid numbers it turned into.
     bid_no = signal.external_refs.get("bid_notice_no")
     if bid_no:
+        # Another 차수 of the same 공고 (변경·재공고·취소) is the same purchase.
+        opp_id = await session.scalar(
+            select(OpportunitySignal.opportunity_id)
+            .join(Signal, Signal.id == OpportunitySignal.signal_id)
+            .where(Signal.id != signal.id, Signal.external_refs.contains({"bid_notice_no": bid_no}))
+            .limit(1)
+        )
+        if opp_id is not None:
+            return int(opp_id)
+        # A 사전규격 lists the bid numbers it turned into.
         opp_id = await session.scalar(
             select(OpportunitySignal.opportunity_id)
             .join(Signal, Signal.id == OpportunitySignal.signal_id)
@@ -275,7 +286,22 @@ async def refresh_opportunity(
     if not links:
         await session.delete(opp)
         return
-    by_stage = sorted(links, key=lambda s: (STAGE_ORDER[Stage(s.stage)], s.observed_at))
+    withdrawn = withdrawn_bids(
+        (s.external_refs, s.observed_at) for s in links if s.stage == Stage.BID.value
+    )
+    # A 취소공고, and a 공고 it withdrew, say no tender is out: the stage, the window and the
+    # status come from what is left.
+    live = [
+        s
+        for s in links
+        if not (
+            s.stage == Stage.BID.value
+            and (
+                CANCELS_KEY in s.external_refs or s.external_refs.get("bid_notice_no") in withdrawn
+            )
+        )
+    ]
+    by_stage = sorted(live or links, key=lambda s: (STAGE_ORDER[Stage(s.stage)], s.observed_at))
     top = by_stage[-1]
     stage = Stage(top.stage)
     opp.stage = stage.value
@@ -306,11 +332,17 @@ async def refresh_opportunity(
         mean = [sum(float(v[i]) for v in vectors) / len(vectors) for i in range(dim)]
         norm = math.sqrt(sum(x * x for x in mean)) or 1.0
         opp.embedding = [x / norm for x in mean]
-    bids = [s for s in links if s.stage in (Stage.BID.value, Stage.AWARD.value)]
+    bids = [s for s in live if s.stage in (Stage.BID.value, Stage.AWARD.value)]
     opp.bid_published_at = min(s.observed_at for s in bids) if bids else None
     if opp.bid_published_at:
         opp.bid_window_start = opp.bid_window_end = opp.bid_published_at
         opp.status = "bid_open" if (today - opp.bid_published_at).days <= 21 else "closed"
+    elif not live:
+        # Only a 공고 and its 취소, nothing earlier to say the project lives on: that tender is
+        # over. A 재공고 carrying the same 발주계획 or 공고 number links here and reopens it.
+        opp.bid_published_at = min(s.observed_at for s in links)
+        opp.bid_window_start = opp.bid_window_end = opp.bid_published_at
+        opp.status = "closed"
     else:
         timed = [s for s in by_stage if s.expected_year]
         basis = timed[-1] if timed else top

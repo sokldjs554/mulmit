@@ -207,6 +207,8 @@ def map_item(doc_type: DocType, item: dict[str, Any]) -> RawRecord | None:
             "prespec_no": pick(item, "bfSpecRgstNo"),
             "order_plan_no": pick(item, "orderPlanUntyNo"),
             "contract_method": pick(item, "cntrctCnclsMthdNm"),
+            # 등록공고 · 재공고 · 변경공고 · 취소공고 (live 2026-09-26: 1,738 of 30,522 취소)
+            "notice_kind": pick(item, "ntceKindNm"),
             "detail_url": pick(item, "bidNtceDtlUrl"),
         }
         publisher = pick(item, "dminsttNm", "ntceInsttNm")

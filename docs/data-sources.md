@@ -72,7 +72,8 @@ WHERE key = 'clik_minutes';
 | 사전규격 | `/ao/HrcspSsstndrdInfoService/getPublicPrcureThngInfo{Servc,Thng,Cnstwk}` | `bfSpecRgstNo` | `prdctClsfcNoNm`, `asignBdgtAmt`, `bidNtceNoList`, `rlDminsttNm` (`orderPlanUntyNo`는 응답에 없음) |
 | 입찰공고 | `/ad/BidPublicInfoService/getBidPblancListInfo{Servc,Thng,Cnstwk}` | `bidNtceNo`-`bidNtceOrd` | `bidNtceNm`, `asignBdgtAmt`(공사는 `bdgtAmt`)/`presmptPrce`, `bfSpecRgstNo`, `orderPlanUntyNo`, `dminsttNm` |
 
-- 참조번호(`orderPlanUntyNo`, `bfSpecRgstNo`, 공고번호)가 있으면 **유사도보다 먼저** 그 번호로 기회를 잇습니다.
+- 참조번호(`orderPlanUntyNo`, `bfSpecRgstNo`, 공고번호)가 있으면 **유사도보다 먼저** 그 번호로 기회를 잇습니다. 같은 공고번호의 다른 차수(변경·재공고·취소)도 번호로 같은 기회에 묶습니다.
+- 공고 종류(`ntceKindNm`)가 `취소공고`면 그 공고번호의 입찰을 거둬들인 것으로 봅니다. 기회는 남은 신호로 단계와 상태를 다시 계산합니다.
 - 기관은 먼저 이름으로 우리 기관 사전(지자체 전체)에 맞춥니다. 사전으로 풀리지 않으면 레코드의 수요기관코드(`orderInsttCd`·`rlDminsttCd`·`dminsttCd`)로 기관을 새로 만들고(`G2B-<코드>`), 다음부터는 이름을 보지 않고 코드로 찾습니다. 학교·병원·공사·공단 대부분이 이 경로입니다([ADR-0011](adr/0011-provider-codes-for-institutions.md)).
 - 지자체처럼 생긴 이름이 사전에 없거나, "중구청"처럼 광역시가 빠져 모호하면 새 기관을 만들지 않고 검토 대기열로 보냅니다.
 

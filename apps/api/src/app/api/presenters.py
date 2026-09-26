@@ -25,7 +25,7 @@ from app.db.models import (
     Recommendation,
     Signal,
 )
-from app.domain.stages import STAGE_LABEL, STAGE_ORDER, Stage, tender_is_out
+from app.domain.stages import CANCELS_KEY, STAGE_LABEL, STAGE_ORDER, Stage, tender_is_out
 from app.domain.taxonomy import CATEGORIES, Category
 from app.domain.timing import remaining_window
 
@@ -148,7 +148,9 @@ def signal_out(
     return SignalOut(
         id=s.id,
         stage=s.stage,
-        stage_label=STAGE_LABEL[Stage(s.stage)],
+        stage_label="입찰공고 취소"
+        if CANCELS_KEY in s.external_refs
+        else STAGE_LABEL[Stage(s.stage)],
         observed_at=s.observed_at,
         title=s.title,
         summary=s.summary,
