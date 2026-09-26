@@ -21,6 +21,16 @@ variable "web_url" {
   default     = ""
 }
 
+variable "allow_destroy" {
+  description = <<-EOT
+    For a stack meant to be torn down (a demo, a staging run): turns off Cloud SQL deletion
+    protection and lets `terraform destroy` empty the raw-document bucket. Leave false for
+    anything holding data you want to keep.
+  EOT
+  type        = bool
+  default     = false
+}
+
 variable "db_tier" {
   type    = string
   default = "db-custom-1-3840"

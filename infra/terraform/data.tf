@@ -4,7 +4,7 @@ resource "google_sql_database_instance" "pg" {
   name                = "app-pg16"
   database_version    = "POSTGRES_16"
   region              = var.region
-  deletion_protection = true
+  deletion_protection = !var.allow_destroy
 
   settings {
     tier              = var.db_tier
