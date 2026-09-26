@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Document, DocumentChunk, ReviewItem, Signal
 from app.domain.grounding import GroundingReport, verify_extraction
 from app.domain.krw import detect_table_unit
-from app.domain.stages import Stage
+from app.domain.stages import CANCEL_NOTICE, CANCELS_KEY, Stage
 from app.domain.synonyms import canonicalize
 from app.domain.taxonomy import Category, classify_category
 from app.domain.text import collapse_ws
@@ -112,6 +112,9 @@ def _structured_signal(runtime: Runtime, doc: Document) -> dict[str, Any]:
     refs = {k: s[k] for k in ("order_plan_no", "prespec_no", "bid_notice_no") if s.get(k)}
     if s.get("bid_notice_nos"):
         refs["bid_notice_nos"] = s["bid_notice_nos"]
+    cancels = s.get("notice_kind") == CANCEL_NOTICE and s.get("bid_notice_no")
+    if cancels:
+        refs[CANCELS_KEY] = s["bid_notice_no"]  # this 차수 withdraws 공고 <no>
     owner = _demand_owner(runtime, doc)
     issues = [] if owner else ["institution_unresolved"]
     return {
@@ -120,7 +123,7 @@ def _structured_signal(runtime: Runtime, doc: Document) -> dict[str, Any]:
         "speaker_institution_code": doc.institution_code,
         "department": doc.department,
         "title": title,
-        "summary": f"{doc.publisher_raw or ''} {doc.title}".strip(),
+        "summary": f"{doc.publisher_raw or ''} {doc.title}{' (취소공고)' if cancels else ''}".strip(),
         "category": category.value,
         "keywords": [title],
         "budget_krw": amount,

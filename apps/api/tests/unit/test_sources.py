@@ -351,6 +351,7 @@ def test_g2b_live_construction_bid_takes_the_budget_not_the_estimate() -> None:
     assert s["estimated_price"] == 69_300_000
     assert s["order_plan_no"] == "R26DD20870511"
     assert "prespec_no" not in s
+    assert s["notice_kind"] == "취소공고"  # this live row withdraws 공고 R26BK01727884
 
 
 # Shapes seen in 30 days of live data (2026-08-28 ~ 2026-09-26, 57,514 rows); values trimmed.

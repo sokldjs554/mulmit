@@ -11,8 +11,10 @@ them off using the conversion rates the backtest measures.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from datetime import date, timedelta
 from enum import StrEnum
+from typing import Any
 
 from app.domain.timing import Half
 
@@ -73,6 +75,27 @@ def tender_is_out(stage: Stage | str, bid_published_at: date | None) -> bool:
     """The 입찰공고 is out: from here nothing about the tender is a forecast any more. The
     conversion probability is 1.0 by definition, so it is not an estimate to show."""
     return bid_published_at is not None or STAGE_ORDER[Stage(stage)] >= STAGE_ORDER[Stage.BID]
+
+
+# 나라장터 withdraws a 입찰공고 by publishing a 취소공고 as a later 차수 of the same number
+# (1,738 of 30,522 live notices, 2026-09-26). The 취소 is no tender of its own.
+CANCEL_NOTICE = "취소공고"
+CANCELS_KEY = "cancels_bid_notice_no"
+
+
+def withdrawn_bids(notices: Iterable[tuple[Mapping[str, Any], date]]) -> set[str]:
+    """Bid numbers whose latest 차수 is a 취소공고, from (external_refs, observed_at) pairs. A
+    재공고 under the same number after the 취소 puts it back; on the same day the 취소 wins,
+    the safer reading for someone deciding whether to bid."""
+    latest: dict[str, tuple[date, bool]] = {}
+    for refs, at in notices:
+        no = refs.get(CANCELS_KEY) or refs.get("bid_notice_no")
+        if not no:
+            continue
+        key = (at, CANCELS_KEY in refs)
+        if no not in latest or key > latest[no]:
+            latest[no] = key
+    return {no for no, (_, cancelled) in latest.items() if cancelled}
 
 
 def later(a: Stage, b: Stage) -> Stage:

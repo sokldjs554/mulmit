@@ -424,3 +424,95 @@ async def test_reresolve_in_a_new_process_gives_a_prespec_its_bids_institution(
     assert before is None
     assert after == "G2B-B553990"
     assert report["resolved"] == 1
+
+
+# A 공고, its 취소공고 (a later 차수 with no 발주계획 number, as in live data) and a 재공고.
+C_PLAN = PLAN | {"orderPlanUntyNo": "R26DD92000001", "bidNtceNoList": "", "bizNm": "청사 CCTV 교체"}
+C_BID = BID | {
+    "bidNtceNo": "R26BK92000001",
+    "bidNtceNm": "청사 CCTV 교체",
+    "orderPlanUntyNo": "R26DD92000001",
+    "ntceKindNm": "등록공고",
+}
+C_CANCEL = C_BID | {
+    "bidNtceOrd": "001",
+    "ntceKindNm": "취소공고",
+    "bidNtceDt": "2026-09-22 09:00:00",
+    "orderPlanUntyNo": "",
+}
+C_REBID = C_BID | {"bidNtceOrd": "002", "ntceKindNm": "재공고", "bidNtceDt": "2026-09-24 09:00:00"}
+
+
+async def _opportunities_after(runtime, records):  # type: ignore[no-untyped-def]
+    from app.db.models import Opportunity
+    from app.domain.stages import tender_is_out
+
+    async with get_sessionmaker()() as s:
+        source = Source(key="test_g2b_cancel", name="t", adapter="g2b", enabled=False, config={})
+        s.add(source)
+        await s.flush()
+        signal_ids: list[int] = []
+        for doc_type, item in records:
+            rec = map_item(doc_type, item)
+            assert rec is not None
+            doc, _ = await upsert_record(s, source, rec, runtime)
+            signal_ids += (await process_document(s, runtime, doc.id)).signal_ids
+        await link_signals(s, runtime, signal_ids, today=date(2026, 9, 26))
+        opp_ids = set(
+            (
+                await s.scalars(
+                    select(OpportunitySignal.opportunity_id).where(
+                        OpportunitySignal.signal_id.in_(signal_ids)
+                    )
+                )
+            ).all()
+        )
+        opps = [await s.get(Opportunity, i) for i in opp_ids]
+        seen = [
+            (o.stage, o.status, o.bid_published_at, tender_is_out(o.stage, o.bid_published_at))
+            for o in opps
+            if o is not None
+        ]
+        await s.rollback()
+    return seen
+
+
+async def test_a_cancelled_tender_is_no_tender(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
+    seen = await _opportunities_after(
+        runtime, [("order_plan", C_PLAN), ("bid_notice", C_BID), ("bid_notice", C_CANCEL)]
+    )
+    # One opportunity (the 취소 joins by its 공고 number), back to 공고 전 on the plan.
+    assert seen == [("order_plan", "open", None, False)]
+
+
+async def test_a_tender_with_nothing_but_its_cancel_is_over(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
+    seen = await _opportunities_after(runtime, [("bid_notice", C_BID), ("bid_notice", C_CANCEL)])
+    assert seen == [("bid_notice", "closed", date(2026, 9, 20), True)]
+
+
+async def test_a_reannouncement_reopens_it(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
+    seen = await _opportunities_after(
+        runtime,
+        [
+            ("order_plan", C_PLAN),
+            ("bid_notice", C_BID),
+            ("bid_notice", C_CANCEL),
+            ("bid_notice", C_REBID),
+        ],
+    )
+    assert seen == [("bid_notice", "bid_open", date(2026, 9, 20), True)]
+
+
+async def test_another_order_of_the_same_notice_joins_by_number(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
+    # A 변경공고 can rename the project and change the budget; its number still says it is
+    # the same purchase, whatever the similarity score.
+    changed = C_BID | {
+        "bidNtceOrd": "001",
+        "ntceKindNm": "변경공고",
+        "bidNtceNm": "통합관제센터 영상감시장치 증설 및 스마트 연계",
+        "bdgtAmt": "412000000",
+        "orderPlanUntyNo": "",
+        "bidNtceDt": "2026-09-23 09:00:00",
+    }
+    seen = await _opportunities_after(runtime, [("bid_notice", C_BID), ("bid_notice", changed)])
+    assert seen == [("bid_notice", "bid_open", date(2026, 9, 20), True)]
