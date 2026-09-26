@@ -394,6 +394,9 @@ async def process_document(
 
 
 async def pending_document_ids(session: AsyncSession, limit: int = 500) -> list[int]:
+    # Publication order: signals are created, and then linked, in the order the provider put the
+    # records out, so a 발주계획 is seen before the 공고 that follows it (backfill.process_pending
+    # links in slices and relies on this).
     rows = await session.scalars(
         select(Document.id)
         .where(Document.parse_status == "pending")

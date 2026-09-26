@@ -371,6 +371,23 @@ def test_g2b_placeholder_amounts_are_not_budgets() -> None:
     assert plan is not None and "amount_krw" not in plan.structured
 
 
+def test_g2b_only_current_bid_numbers_lose_a_trailing_order() -> None:
+    # Older 나라장터 numbers (연월 + 일련번호) and anything unknown are kept whole: cutting three
+    # digits off a number we do not recognise would make it match nothing, or the wrong 공고.
+    plan = map_item(
+        "order_plan",
+        LIVE_ORDER_PLAN_THNG
+        | {"bidNtceNoList": "20231234567,2023123456700001,R26BK01739589000,R26BK0173958"},
+    )
+    assert plan is not None
+    assert plan.structured["bid_notice_nos"] == [
+        "20231234567",
+        "2023123456700001",
+        "R26BK01739589",
+        "R26BK0173958",
+    ]
+
+
 def test_g2b_bid_number_lists_match_bid_numbers() -> None:
     # 발주계획 append the 3-digit 차수; 사전규격 do not; both can list several.
     plan = map_item(

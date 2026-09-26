@@ -22,6 +22,7 @@ sources check``; see ``docs/data-sources.md``). Fields the provider never fills 
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -104,12 +105,18 @@ def _amount(item: dict[str, Any], *names: str) -> int | None:
     return None
 
 
+# R + 연도 2자리 + 업무 2자리 + 8자리, as 나라장터 numbers have been since 2025; 발주계획 append
+# a 3-digit 차수. Only this shape is trimmed, so an older or unknown number is kept whole.
+_NUMBER_WITH_ORDER = re.compile(r"(R\d{2}[A-Z]{2}\d{8})\d{3}")
+
+
 def _bid_numbers(value: Any) -> list[str]:
     """``bidNtceNoList`` → bid numbers. 사전규격 send "R26BK01702619,R26BK01717858"; 발주계획
     append the 3-digit 차수 ("R26BK01739589000"), which is dropped so both match ``bidNtceNo``."""
     out: list[str] = []
     for raw in str(value or "").replace(" ", "").split(","):
-        no = raw[:-3] if len(raw) == 16 and raw[-3:].isdigit() and raw[:3].isalnum() else raw
+        m = _NUMBER_WITH_ORDER.fullmatch(raw)
+        no = m.group(1) if m else raw
         if no and no not in out:
             out.append(no)
     return out
