@@ -8,7 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 
-import { api, newIdempotencyKey, unwrap, type Schemas } from "./client";
+import { api, retryTransient, unwrap, type Schemas } from "./client";
 import type { operations } from "./schema";
 
 export const qk = {
@@ -156,19 +156,24 @@ export function useFeedback(id: number) {
   });
 }
 
+/**
+ * Charged requests take the idempotency key as the mutation variable: the caller makes one per
+ * click, and TanStack passes the same variables to every retry, so a retried request reuses the
+ * key and the API charges once. (A key made inside mutationFn would be new on every retry.)
+ */
 export function useCreateBrief(id: number) {
   const qc = useQueryClient();
   return useMutation({
-    // One idempotency key per click: a double-click or a network retry cannot charge twice.
-    mutationFn: async (idempotencyKey?: string) =>
+    mutationFn: async (idempotencyKey: string) =>
       unwrap(
         await api.POST("/api/opportunities/{opportunity_id}/briefs", {
           params: {
             path: { opportunity_id: id },
-            header: { "Idempotency-Key": idempotencyKey ?? newIdempotencyKey("brief") },
+            header: { "Idempotency-Key": idempotencyKey },
           },
         }),
       ),
+    retry: retryTransient,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.opportunity(id) });
       void qc.invalidateQueries({ queryKey: qk.me });
@@ -308,13 +313,14 @@ export function useRegisterCard() {
 export function useChangePlan() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (plan: Schemas["PlanChangeIn"]["plan"]) =>
+    mutationFn: async ({ plan, idempotencyKey }: { plan: Schemas["PlanChangeIn"]["plan"]; idempotencyKey: string }) =>
       unwrap(
         await api.POST("/api/billing/plan", {
           body: { plan },
-          params: { header: { "Idempotency-Key": newIdempotencyKey("plan") } },
+          params: { header: { "Idempotency-Key": idempotencyKey } },
         }),
       ),
+    retry: retryTransient,
     onSettled: () => invalidateBilling(qc),
   });
 }
@@ -322,13 +328,14 @@ export function useChangePlan() {
 export function useBuyCredits() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (pack: string) =>
+    mutationFn: async ({ pack, idempotencyKey }: { pack: string; idempotencyKey: string }) =>
       unwrap(
         await api.POST("/api/billing/credits", {
           body: { pack },
-          params: { header: { "Idempotency-Key": newIdempotencyKey("pack") } },
+          params: { header: { "Idempotency-Key": idempotencyKey } },
         }),
       ),
+    retry: retryTransient,
     onSettled: () => invalidateBilling(qc),
   });
 }

@@ -134,13 +134,16 @@ function Plans({ billing }: { billing: Billing }) {
               className="mt-5"
               variant={isCurrent || !plan.monthly_price_krw ? "secondary" : "primary"}
               disabled={isCurrent || change.isPending}
-              loading={change.isPending && change.variables === plan.key}
+              loading={change.isPending && change.variables?.plan === plan.key}
               onClick={() =>
-                change.mutate(plan.key as Schemas["PlanChangeIn"]["plan"], {
-                  onSuccess: () =>
-                    toast("good", plan.monthly_price_krw ? `${plan.name} 플랜으로 바꿨어요` : "이번 결제 기간이 끝나면 Free로 바뀌어요"),
-                  onError: (e) => toast("critical", e instanceof ApiError ? e.message : "플랜을 바꾸지 못했어요"),
-                })
+                change.mutate(
+                  { plan: plan.key as Schemas["PlanChangeIn"]["plan"], idempotencyKey: newIdempotencyKey("plan") },
+                  {
+                    onSuccess: () =>
+                      toast("good", plan.monthly_price_krw ? `${plan.name} 플랜으로 바꿨어요` : "이번 결제 기간이 끝나면 Free로 바뀌어요"),
+                    onError: (e) => toast("critical", e instanceof ApiError ? e.message : "플랜을 바꾸지 못했어요"),
+                  },
+                )
               }
             >
               {isCurrent ? "이용 중" : plan.monthly_price_krw ? "이 플랜으로 바꾸기" : "해지 예약"}
@@ -167,9 +170,9 @@ function Credits({ billing }: { billing: Billing }) {
                 key={p.key}
                 size="sm"
                 variant="secondary"
-                loading={buy.isPending && buy.variables === p.key}
+                loading={buy.isPending && buy.variables?.pack === p.key}
                 onClick={() =>
-                  buy.mutate(p.key, {
+                  buy.mutate({ pack: p.key, idempotencyKey: newIdempotencyKey("pack") }, {
                     onSuccess: () => toast("good", `크레딧 ${p.credits}개를 충전했어요`),
                     onError: (e) => toast("critical", e instanceof ApiError ? e.message : "결제하지 못했어요"),
                   })

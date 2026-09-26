@@ -41,6 +41,20 @@ export function unwrap<T>(result: { data?: T; error?: unknown; response: Respons
   return result.data as T;
 }
 
+/**
+ * Retry policy for requests that charge money (briefs, plan changes, credit packs).
+ *
+ * Retry only when the failure says nothing about the request itself — the network dropped
+ * (fetch throws a TypeError) or the server or the BFF proxy failed (5xx) — and at most twice.
+ * This is safe only because those requests carry an Idempotency-Key that is created once per
+ * click and stays the same across retries, so the API applies the charge at most once.
+ */
+export function retryTransient(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 2) return false;
+  if (error instanceof ApiError) return error.status >= 500;
+  return error instanceof TypeError;
+}
+
 export function newIdempotencyKey(prefix: string): string {
   const random =
     typeof crypto !== "undefined" && "randomUUID" in crypto
