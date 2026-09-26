@@ -25,7 +25,8 @@ class RawRecord:
     published_at: date
     mime: str
     publisher_raw: str | None = None
-    institution_code_hint: str | None = None
+    institution_code_hint: str | None = None  # a code of our institution table
+    provider_institution_code: str | None = None  # the provider's own (조달청 수요기관코드)
     sido_hint: str | None = None
     url: str | None = None
     content: bytes | None = None

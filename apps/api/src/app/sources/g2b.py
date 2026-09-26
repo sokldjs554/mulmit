@@ -222,7 +222,7 @@ def map_item(doc_type: DocType, item: dict[str, Any]) -> RawRecord | None:
         published_at=published,
         mime="application/json",
         publisher_raw=str(publisher) if publisher else None,
-        institution_code_hint=None,  # 조달 기관코드 ≠ our registry codes; resolved by name
+        provider_institution_code=str(inst_code) if inst_code else None,
         url=structured.get("detail_url") or structured.get("spec_url"),
         structured={k: v for k, v in structured.items() if v not in (None, "", [])}
         | {"provider_institution_code": inst_code, "raw": item},

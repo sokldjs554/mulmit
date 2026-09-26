@@ -154,6 +154,34 @@ async def test_admin_requires_staff(client: httpx.AsyncClient) -> None:
     assert (await client.get("/api/admin/llm/usage")).status_code == 200
 
 
+async def test_reviewers_pick_from_the_table_not_from_provider_codes(
+    client: httpx.AsyncClient,
+) -> None:
+    from app.db.models import InstitutionRow
+    from app.db.session import session_scope
+
+    async with session_scope() as s:
+        s.add(
+            InstitutionRow(
+                code="G2B-7069991",
+                name="테스트중학교",
+                kind="public_agency",
+                sido="",
+                region_code="",
+            )
+        )
+    try:
+        await _login(client, "admin@example.com", "admin-pass-1234")
+        rows = (await client.get("/api/institutions")).json()
+    finally:
+        async with session_scope() as s:
+            await s.delete(await s.get(InstitutionRow, "G2B-7069991"))
+    codes = {r["code"] for r in rows}
+    assert "G2B-7069991" not in codes
+    assert {"LG-11680", "LG-51110", "EO-41000"} <= codes
+    assert not any(c.startswith("CN-") for c in codes)
+
+
 async def test_login_is_throttled(client: httpx.AsyncClient) -> None:
     codes = [
         (

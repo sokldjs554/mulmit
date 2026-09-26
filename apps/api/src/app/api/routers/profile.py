@@ -7,6 +7,7 @@ from app.api.deps import PrincipalDep, QueueDep, RuntimeDep, SessionDep
 from app.api.schemas import CategoryOut, InstitutionOut, ProfileIO
 from app.billing.plans import PLANS
 from app.db.models import CompanyProfile, InstitutionRow
+from app.domain.institutions import PROVIDER_CODE_PREFIX
 from app.domain.taxonomy import CATEGORIES, Category
 from app.worker.queue import enqueue
 
@@ -72,9 +73,14 @@ async def put_profile(
 
 @router.get("/institutions", response_model=list[InstitutionOut])
 async def institutions(principal: PrincipalDep, session: SessionDep) -> list[InstitutionOut]:
+    # The table's own institutions: the ones a reviewer may need to pick. Those known by a
+    # provider code (thousands of schools and hospitals) never wait for an institution.
     rows = await session.scalars(
         select(InstitutionRow)
-        .where(InstitutionRow.kind != "council")
+        .where(
+            InstitutionRow.kind != "council",
+            InstitutionRow.code.not_like(f"{PROVIDER_CODE_PREFIX}%"),
+        )
         .order_by(InstitutionRow.region_code)
     )
     return [InstitutionOut.model_validate(r) for r in rows]
