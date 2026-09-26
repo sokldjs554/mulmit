@@ -311,3 +311,27 @@ async def test_reresolve_gives_a_codeless_prespec_the_institution_its_bid_names(
         codes = [d.institution_code for d in docs]
         await s.rollback()
     assert codes == ["G2B-B559990", "G2B-B559990"]
+
+
+async def test_a_framework_contract_for_every_buyer_is_no_institution(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
+    # 제3자단가계약 name their 수요기관 "각 수요기관" under a placeholder code; one institution
+    # made of them would gather every such contract into one opportunity.
+    rt = dataclasses.replace(runtime, registry=load_registry_csv())
+    item = BID | {
+        "bidNtceNo": "R26BK90000030",
+        "bidNtceNm": "우수조달물품(2026999, 테스트장치) 제3자단가계약",
+        "dminsttCd": "ZZ99999",
+        "dminsttNm": "각 수요기관",
+        "ntceInsttNm": "조달청",
+    }
+    async with get_sessionmaker()() as s:
+        source = Source(key="test_g2b_each", name="t", adapter="g2b", enabled=False, config={})
+        s.add(source)
+        await s.flush()
+        rec = map_item("bid_notice", item)
+        assert rec is not None
+        doc, _ = await upsert_record(s, source, rec, rt)
+        stored = await s.get(InstitutionRow, "G2B-ZZ99999")
+        await s.rollback()
+    assert doc.institution_code is None
+    assert stored is None

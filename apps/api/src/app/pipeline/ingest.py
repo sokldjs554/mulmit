@@ -19,6 +19,7 @@ from app.domain.institutions import (
     Institution,
     Resolution,
     looks_like_local_government,
+    names_no_institution,
     provider_institution,
 )
 from app.log import get_logger
@@ -70,6 +71,7 @@ async def resolve_institution(
         or not raw
         or not raw.strip()
         or looks_like_local_government(raw)
+        or names_no_institution(raw)
     ):
         return resolution
     inst = await _store_provider_institution(session, provider_institution(provider_code, raw))

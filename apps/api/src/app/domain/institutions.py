@@ -381,6 +381,17 @@ def looks_like_local_government(raw: str) -> bool:
     return parsed.sigungu is not None or parsed.sido_only or parsed.is_council
 
 
+# Not a buyer: 조달청's 제3자단가계약 (framework contracts any institution can order from) name
+# their 수요기관 "각 수요기관", under a placeholder code (ZZ99999). One institution made of them
+# gathered 141 unrelated contracts in 30 days of live data (2026-09-26), and similarity linking
+# merged them into one opportunity.
+_NO_INSTITUTION = frozenset({"각수요기관"})
+
+
+def names_no_institution(raw: str) -> bool:
+    return _compact(raw) in _NO_INSTITUTION
+
+
 def provider_institution(code: str, name: str) -> Institution:
     """An institution known only from a provider record: 조달청's 수요기관코드 and name. Kind and
     시도 are read off the name for display and the region filter, and left blank when the name
