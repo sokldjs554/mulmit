@@ -5,7 +5,9 @@ Retry policy (per request):
 * Timeouts, connection errors, 429 and 5xx → retry with exponential backoff and full jitter,
   honouring ``Retry-After`` when present.
 * Provider "soft errors" — data.go.kr answers *HTTP 200* with an XML ``OpenAPI_ServiceResponse``
-  or a JSON ``resultCode != "00"`` — are classified: quota/traffic codes raise
+  or a JSON ``resultCode != "00"``, and its gateway answers *HTTP 401/403* with a JSON
+  ``OpenAPI_ServiceResponse`` (seen live 2026-09-26: 403 + code 30 for a service the key was not
+  applied for) — are classified by the provider's code, not the status: quota/traffic codes raise
   :class:`QuotaExhaustedError` (reschedule, do not retry), key/parameter codes raise
   :class:`FatalSourceError` (page an operator), transient codes retry.
 * Every attempt goes through the shared rate limiter; every outcome feeds the circuit breaker.
@@ -57,15 +59,21 @@ class TransientSourceError(Exception):
     pass
 
 
-def _classify_soft_error(source: str, body: str) -> None:
+def _describe(exc: Exception) -> str:
+    """httpx raises ``ConnectTimeout('')``/``ReadError('')`` — keep at least the type."""
+    return str(exc) or type(exc).__name__
+
+
+def _classify_soft_error(source: str, body: str, *, status: int | None = None) -> None:
     code: str | None = None
     message = ""
     if body.lstrip().startswith("<"):
         m = re.search(r"<returnReasonCode>\s*(\d+)\s*</returnReasonCode>", body)
         if m:
             code = m.group(1)
-            mm = re.search(r"<returnAuthMsg>\s*([^<]+)</returnAuthMsg>", body)
-            message = mm.group(1) if mm else ""
+            err = re.search(r"<errMsg>\s*([^<]+)</errMsg>", body)
+            auth = re.search(r"<returnAuthMsg>\s*([^<]+)</returnAuthMsg>", body)
+            message = " ".join(x.group(1).strip() for x in (err, auth) if x)
         else:
             m = re.search(r"<resultCode>\s*(\d+)\s*</resultCode>", body)
             if m and m.group(1) not in {"00", "0"}:
@@ -75,8 +83,16 @@ def _classify_soft_error(source: str, body: str) -> None:
             parsed = json.loads(body)
         except json.JSONDecodeError:
             return
-        header = (parsed.get("response") or {}).get("header") if isinstance(parsed, dict) else None
-        if isinstance(header, dict):
+        if not isinstance(parsed, dict):
+            return
+        header = (parsed.get("response") or {}).get("header")
+        gateway = (parsed.get("OpenAPI_ServiceResponse") or {}).get("cmmMsgHeader")
+        if isinstance(gateway, dict) and gateway.get("returnReasonCode") is not None:
+            code = str(gateway["returnReasonCode"])
+            message = " ".join(
+                str(gateway[k]) for k in ("errMsg", "returnAuthMsg") if gateway.get(k)
+            )
+        elif isinstance(header, dict):
             rc = str(header.get("resultCode", "00"))
             if rc not in {"00", "0"}:
                 code, message = rc, str(header.get("resultMsg", ""))
@@ -85,7 +101,10 @@ def _classify_soft_error(source: str, body: str) -> None:
     if code in _DGK_QUOTA_CODES:
         raise QuotaExhaustedError(source, next_kst_midnight())
     if code in _DGK_FATAL_CODES:
-        raise FatalSourceError(f"{source}: provider error {code} {message}".strip())
+        where = f" (HTTP {status})" if status else ""
+        raise FatalSourceError(
+            f"{source}: provider error {code} {message}".strip() + where, status=status
+        )
     raise TransientSourceError(f"{source}: provider error {code} {message}".strip())
 
 
@@ -152,6 +171,16 @@ class ResilientClient:
                     resp = await self._client.request(method, url, params=params)
                 else:
                     resp = await self._read_capped(method, url, params, max_bytes)
+                if soft_errors and resp.status_code >= 400 and len(resp.content) < 65_536:
+                    # The gateway's 401/403 bodies say *why* (code 30: not applied for); a bare
+                    # "HTTP 403" would hide it. A transient code leaves the status to decide.
+                    try:
+                        _classify_soft_error(self.source, resp.text, status=resp.status_code)
+                    except TransientSourceError:
+                        pass
+                    except (FatalSourceError, QuotaExhaustedError):
+                        await self._breaker.record_success(self.source)  # provider is up
+                        raise
                 if resp.status_code in RETRYABLE_STATUS:
                     retry_after = resp.headers.get("Retry-After")
                     raise TransientSourceError(f"{self.source}: HTTP {resp.status_code}")
@@ -181,13 +210,13 @@ class ResilientClient:
                     source=self.source,
                     attempt=attempt + 1,
                     delay=round(delay, 2),
-                    error=str(exc),  # app.log redacts credentials in every log line
+                    error=_describe(exc),  # app.log redacts credentials in every log line
                 )
                 await self._sleep(delay)
         assert last_exc is not None
         raise TransientSourceError(
             redact_secrets(
-                f"{self.source}: gave up after {self._max_attempts} attempts: {last_exc}"
+                f"{self.source}: gave up after {self._max_attempts} attempts: {_describe(last_exc)}"
             )
         ) from last_exc
 

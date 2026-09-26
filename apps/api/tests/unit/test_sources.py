@@ -59,6 +59,14 @@ async def test_gives_up_after_max_attempts() -> None:
         await client.get_json("/x")
 
 
+async def test_give_up_message_names_a_blank_transport_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("")  # what a stalled TLS handshake to data.go.kr looks like
+
+    with pytest.raises(TransientSourceError, match="gave up after 2 attempts: ConnectTimeout"):
+        await _client(handler, max_attempts=2).get_json("/x")
+
+
 async def test_http_200_quota_envelope_is_not_retried() -> None:
     calls = {"n": 0}
 
@@ -75,6 +83,51 @@ async def test_bad_service_key_is_fatal() -> None:
     handler = lambda r: httpx.Response(200, text=DATA_GO_KR_BAD_KEY_XML)  # noqa: E731
     with pytest.raises(FatalSourceError):
         await _client(handler).get_json("/x")
+
+
+# What apis.data.go.kr actually sent on 2026-09-26 for a service the key was not applied for:
+# HTTP 403 with a JSON gateway envelope (not HTTP 200, not ``response.header``).
+DATA_GO_KR_NOT_REGISTERED_JSON = {
+    "OpenAPI_ServiceResponse": {
+        "cmmMsgHeader": {
+            "errMsg": "SERVICE_KEY_IS_NOT_REGISTERED_ERROR",
+            "returnAuthMsg": "등록되지 않은 서비스키",
+            "returnReasonCode": "30",
+        }
+    }
+}
+
+
+async def test_http_403_gateway_envelope_names_the_provider_code() -> None:
+    calls = {"n": 0}
+    breaker = MemoryBreaker(failure_threshold=1)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(403, json=DATA_GO_KR_NOT_REGISTERED_JSON)
+
+    with pytest.raises(FatalSourceError) as info:
+        await _client(handler, breaker=breaker).get_json("/x")
+    assert "30 SERVICE_KEY_IS_NOT_REGISTERED_ERROR" in str(info.value)
+    assert info.value.status == 403 and calls["n"] == 1
+    await breaker.before_call("g2b_bid")  # a key problem does not open the circuit
+
+
+async def test_http_200_gateway_envelope_is_not_read_as_an_empty_page() -> None:
+    handler = lambda r: httpx.Response(200, json=DATA_GO_KR_NOT_REGISTERED_JSON)  # noqa: E731
+    with pytest.raises(FatalSourceError, match="SERVICE_KEY_IS_NOT_REGISTERED_ERROR"):
+        await _client(handler).get_json("/x")
+
+
+async def test_http_429_quota_envelope_waits_for_the_reset() -> None:
+    body = {"OpenAPI_ServiceResponse": {"cmmMsgHeader": {"returnReasonCode": "22"}}}
+    with pytest.raises(QuotaExhaustedError):
+        await _client(lambda r: httpx.Response(429, json=body)).get_json("/x")
+
+
+async def test_http_4xx_without_envelope_is_still_fatal() -> None:
+    with pytest.raises(FatalSourceError, match="HTTP 404"):
+        await _client(lambda r: httpx.Response(404, text="not found")).get_json("/x")
 
 
 async def test_json_result_code_error_is_classified() -> None:

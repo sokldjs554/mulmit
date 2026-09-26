@@ -94,7 +94,7 @@ async def check_g2b(
             base_url=g2b.BASE_URL,
             limiter=limiter,
             breaker=breaker,
-            max_attempts=2,
+            max_attempts=3,  # apis.data.go.kr resets some TLS handshakes; don't call that a key problem
             transport=transport,
         )
         started = time.perf_counter()
@@ -163,6 +163,39 @@ def _inspect(
         }
 
 
+# 공공데이터포털 lists each service separately and a key works only for services applied for.
+PORTAL_SERVICES = {
+    "OrderPlanSttusService": (
+        "조달청_나라장터 발주계획현황서비스",
+        "https://www.data.go.kr/data/15129462/openapi.do",
+    ),
+    "HrcspSsstndrdInfoService": (
+        "조달청_나라장터 사전규격정보서비스",
+        "https://www.data.go.kr/data/15129437/openapi.do",
+    ),
+    "BidPublicInfoService": (
+        "조달청_나라장터 입찰공고정보서비스",
+        "https://www.data.go.kr/data/15129394/openapi.do",
+    ),
+}
+
+
+def _service(path: str) -> str:
+    return path.rstrip("/").split("/")[-2]
+
+
+def unregistered_services(checks: list[OperationCheck]) -> list[str]:
+    """Services whose calls failed with code 30 — the key was not applied for (or approval
+    has not reached the gateway yet)."""
+    return sorted(
+        {
+            _service(c.path)
+            for c in checks
+            if not c.ok and "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" in (c.error or "")
+        }
+    )
+
+
 _LABEL = {
     "amount_krw": "금액",
     "order_year": "발주연도",
@@ -201,6 +234,19 @@ def render(checks: list[OperationCheck], *, days: int) -> str:
             f"| `{c.source}` | `{op}` | {result} | {c.total if c.total is not None else '–'} | "
             f"{c.items} | {c.mapped} | {_pct(c.publisher)} | {cov} |"
         )
+    if unregistered := unregistered_services(checks):
+        lines += [
+            "",
+            "## 활용신청이 필요한 서비스",
+            "",
+            "오류 30(`SERVICE_KEY_IS_NOT_REGISTERED_ERROR`)은 이 키로 그 서비스를 활용신청하지 "
+            "않았거나, 승인이 아직 게이트웨이에 반영되지 않았다는 뜻입니다. 공공데이터포털에서 "
+            "서비스마다 신청한 뒤(개발계정은 보통 자동승인, 반영까지 1~2시간) 다시 점검합니다.",
+            "",
+        ]
+        for svc in unregistered:
+            name, url = PORTAL_SERVICES.get(svc, (svc, ""))
+            lines.append(f"- [{name}]({url}) (`{svc}`)" if url else f"- `{svc}`")
     dropped = [c for c in checks if c.dropped_item_keys]
     if dropped:
         lines += [
