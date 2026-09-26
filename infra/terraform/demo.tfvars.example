@@ -1,0 +1,10 @@
+# A short-lived demo stack: as cheap as the architecture allows while it runs, and
+# `terraform destroy` removes all of it. Copy to terraform.tfvars and set project_id.
+# See "짧게 올렸다 내리기" in README.md.
+project_id        = "procurement-forecast-2026"
+region            = "asia-northeast3"
+github_repository = "sokldjs554/procurement-forecast"
+web_url           = "" # only used in e-mail links and CORS; the demo needs neither
+
+api_min_instances = 0    # no warm API instance; the first request after a pause waits a few seconds
+allow_destroy     = true # lets `terraform destroy` remove Cloud SQL and the raw-document bucket

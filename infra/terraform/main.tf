@@ -1,6 +1,7 @@
 locals {
   services = [
     "artifactregistry.googleapis.com",
+    "cloudresourcemanager.googleapis.com", # project IAM bindings (iam.tf)
     "compute.googleapis.com",
     "iam.googleapis.com",
     "iamcredentials.googleapis.com",
@@ -51,6 +52,7 @@ resource "google_artifact_registry_repository" "images" {
 resource "google_storage_bucket" "raw" {
   name                        = "${var.project_id}-app-raw"
   location                    = var.region
+  force_destroy               = var.allow_destroy
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
