@@ -44,4 +44,7 @@ service-account*.json
 .terraform/
 *.tfstate
 *.tfstate.*
+# real values (project, web URL, client keys) stay local; the .example is committed
+*.tfvars
+!*.tfvars.example
 *.tfplan
