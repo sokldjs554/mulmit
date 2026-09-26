@@ -1,6 +1,6 @@
 # 시장 조사: 왜 "입찰 이전 신호"인가
 
-작성: 2026-09-25 · 방법: 국내·해외 웹 검색 결과와 각 서비스의 공개 페이지·기사 요약을 교차 확인했습니다. 일부 사이트(stepai.kr, clik.nanet.go.kr, data.go.kr)는 개발 컨테이너의 네트워크 정책으로 직접 열람하지 못했고, 검색 결과의 요약에 의존한 부분은 그렇게 표시했습니다.
+작성: 2026-09-25 · 갱신: 2026-09-26(클라이원트 2.0 발주 예측 반영) · 방법: 국내·해외 웹 검색 결과와 각 서비스의 공개 페이지·기사 요약을 교차 확인했습니다. 일부 사이트(stepai.kr, clik.nanet.go.kr, data.go.kr)는 개발 컨테이너의 네트워크 정책으로 직접 열람하지 못했고, 검색 결과의 요약에 의존한 부분은 그렇게 표시했습니다.
 
 ## 1. 질문
 
@@ -24,7 +24,7 @@
 
 | 서비스 | 내용 |
 |---|---|
-| 클라이원트 | RFP 본문 문맥 분석, 나라장터 외 80여 기관 공고 키워드 매칭 메일, 발주계획·사전규격 기반 영업 시점 안내 ([블로그](https://blog.cliwant.com/aisearch/), [사전 영업 가이드](https://blog.cliwant.com/bid-pre-sales-activity-step-by-step/)) |
+| 클라이원트 | RFP 본문 문맥 분석, 나라장터 외 80여 기관 공고 키워드 매칭 메일, 발주계획·사전규격 기반 영업 시점 안내 ([블로그](https://blog.cliwant.com/aisearch/), [사전 영업 가이드](https://blog.cliwant.com/bid-pre-sales-activity-step-by-step/)). 2.0(2025-09-08)에서 사전 영업 기능 추가: 나라장터 실적·발주계획·사전규격을 결합해 반복되는 공고를 찾고 다음 공고 시점을 확률로 예측, 뉴스·SNS로 경쟁사 활동 분석 ([이데일리](https://marketin.edaily.co.kr/News/ReadE?newsId=01367766642270600), [뉴스웍스](https://www.newsworks.co.kr/news/articleView.html?idxno=810352), [과거 데이터로 미래 입찰 공고를 예측할 수 있을까](https://blog.cliwant.com/predicting-future-bids-from-past-data/); 기사·블로그 본문은 네트워크 정책으로 직접 열지 못해 검색 요약 기준) |
 | 낙비 | 공공조달 5,300만 건 학습, 사정율 예측·자격 분석 ([naktal.me](https://naktal.me/)) |
 | 디마툴즈 | 나라장터·D2B·한전·LH 낙찰가 예측 ([dima-g2b.com](https://dima-g2b.com/home)) |
 | 일타비드 | 공고번호 입력 → 투찰가 구간 예측 ([ilta.kr](https://ilta.kr/)) |
@@ -32,7 +32,7 @@
 
 GitHub에도 같은 API를 감싼 수집·알림 프로젝트가 많습니다: [ppsfinding](https://github.com/pppeume/ppsfinding), [bid_monitor](https://github.com/dgilink/bid_monitor), [narajangteo-notify](https://github.com/agnes4970/-narajangteo-notify), [narajangteo-bid-mcp](https://github.com/opendata-kr/narajangteo-bid-mcp), [oksp-pipeline-radar](https://github.com/jboh0003-dev/oksp-pipeline-radar), [jodalfit](https://github.com/SSEUNGSSEUNGWOO/jodalfit), [g2b-education-dashboard](https://github.com/choiys2/g2b-education-dashboard).
 
-**관찰:** 국내 서비스의 가장 이른 신호는 **발주계획·사전규격**입니다. 공고 몇 주~몇 달 전이지만, 이때는 이미 사업 내용과 예산이 거의 정해져 있습니다.
+**관찰:** 국내 서비스의 가장 이른 신호는 **발주계획·사전규격**입니다. 공고 몇 주~몇 달 전이지만, 이때는 이미 사업 내용과 예산이 거의 정해져 있습니다. 클라이원트 2.0은 여기서 한 걸음 더 나가, 연간 계약처럼 **이미 나온 적 있는 사업**이 다음에 언제 나올지를 과거 이력으로 예측합니다. 반대로 **처음 나오는 사업**은 과거 이력이 없어서 이 방법으로는 잡히지 않고, 여전히 발주계획이 첫 신호입니다.
 
 ### 2-3. 지방의회 회의록 AI: 있지만 영업용이 아님
 
@@ -54,7 +54,7 @@ GitHub에도 같은 API를 감싼 수집·알림 프로젝트가 많습니다: [
 
 비교 글: [Starbridge — GovSpend alternatives](https://starbridge.ai/blog/govspend-alternatives), [NationGraph — GovSpend alternatives](https://www.nationgraph.com/post/govspend-alternatives), [Civic IQ — tracking budget meetings with AI](https://blogs.civiciq.com/2026/06/03/how-to-track-government-budget-meetings-with-ai/).
 
-**관찰:** 미국 SLED 시장에서는 "공고 이전 신호"가 독립된 제품 범주가 되었고 투자도 받았습니다. 한국 공공조달 시장에는 아직 이 층이 없습니다.
+**관찰:** 미국 SLED 시장에서는 "공고 이전 신호"가 독립된 제품 범주가 되었고 투자도 받았습니다(Starbridge는 2025년 10월 시리즈 A 4,200만 달러, [GovTech](https://www.govtech.com/biz/procurement-ai-tech-provider-starbridge-raises-42m)). 한국에서는 재발주 예측(클라이원트 2.0)까지는 나와 있지만, 회의록·예산서처럼 **공고 이력이 생기기 전의 문서**를 읽는 층은 아직 없습니다.
 
 ## 4. 한국에서 가능한가: 데이터가 열려 있다
 
@@ -71,6 +71,6 @@ GitHub에도 같은 API를 감싼 수집·알림 프로젝트가 많습니다: [
 
 > 지방의회 회의록과 세출예산서에서 **공고 6~18개월 전의 수요 신호**를 추출하고, 이를 발주계획 → 사전규격 → 입찰공고로 이어지는 하나의 "기회"로 묶어, 공급 기업에게 **근거 문장과 함께** 추천합니다.
 
-- **흔하지 않음:** 국내에서 지원사업 매칭·공고 검색은 포화 상태이고, 회의록 AI는 영업용이 아닙니다. 해외에서는 같은 틈새(Starbridge, GovSpend, Hamlet)가 검증됐습니다.
+- **흔하지 않음:** 국내에서 지원사업 매칭·공고 검색은 포화 상태이고, 회의록 AI는 영업용이 아닙니다. 가장 가까운 클라이원트 2.0의 발주 예측은 과거 이력이 있는 **재발주**를 겨냥하고, 이 프로젝트는 이력이 없는 **신규 사업**을 겨냥해서 서로 겹치지 않습니다. 해외에서는 같은 틈새(Starbridge, GovSpend, Hamlet)가 검증됐습니다.
 - **공고의 모든 기술을 필연적으로 사용:** 대규모 공공 데이터 수집(API 한도·장애), 비정형 문서(HWP·스캔 PDF → OCR), LLM 구조화 추출과 근거 검증, 문서 간 연결(임베딩 + 규칙), 추천·랭킹, 다채널 알림, 크레딧 과금(영업 브리핑), 운영 콘솔.
 - **측정 가능:** 합성 세계에 정답을 심어 추출·연결·OCR을 수치로 평가하고, 과거 공고 기준 백테스트로 "공고 전 몇 %를 먼저 잡았나"를 계산합니다.
