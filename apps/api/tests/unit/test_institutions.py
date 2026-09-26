@@ -270,3 +270,22 @@ def test_county_health_center_hospital_is_the_county() -> None:
     registry = load_registry_csv()
     assert registry.resolve("충청남도 청양군 보건의료원").institution.code == "LG-44790"
     assert registry.resolve("충청남도 청양의료원").institution is None
+
+
+def test_a_local_government_is_not_taken_by_a_body_that_filed_under_its_code() -> None:
+    # Live shape (2026-09-26): a city's 재단 filed a 발주계획 under the city's own 조달청 code
+    # first; the city's 공고 with that code must still go to the city.
+    registry = load_registry_csv()
+    registry.add(provider_institution("3999100", "(재)오산시문화재단"))
+    res = registry.resolve("경기도 오산시", provider_code="3999100")
+    assert res.institution.code == "LG-41370"
+    assert registry.resolve("(재)오산시문화재단", provider_code="3999100").method == "code"
+
+
+def test_two_codes_with_one_name_keep_their_own_institutions() -> None:
+    registry = load_registry_csv()
+    registry.add(provider_institution("Z099001", "테스트대학교 산학협력단"))
+    other = registry.resolve("테스트대학교 산학협력단", provider_code="ZT09002")
+    assert other.institution is None  # left for its own code to register
+    # Without a code of its own (사전규격), the name still finds the first one.
+    assert registry.resolve("테스트대학교 산학협력단").institution.code == "G2B-Z099001"

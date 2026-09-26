@@ -278,7 +278,14 @@ class InstitutionRegistry:
         if code_hint and (inst := self._by_code.get(code_hint)):
             dept = parse_name(raw).department if raw else None
             return Resolution(inst, dept, 1.0, "code")
-        if provider_code and (inst := self._by_code.get(PROVIDER_CODE_PREFIX + provider_code)):
+        own_code = PROVIDER_CODE_PREFIX + provider_code if provider_code else None
+        # A 지자체 is the table's to name, whatever its code: "(재)구리시상권활성화재단" filed a
+        # 발주계획 under 구리시's own code (live, 2026-09-26), and 구리시's 공고 followed it.
+        if (
+            own_code
+            and (inst := self._by_code.get(own_code))
+            and not (raw and looks_like_local_government(raw))
+        ):
             return Resolution(inst, None, 1.0, "code")
         if not raw or not raw.strip():
             return Resolution(None, None, 0.0, "none")
@@ -286,7 +293,10 @@ class InstitutionRegistry:
         sido = parsed.sido or (_SIDO_LOOKUP.get(sido_hint, sido_hint) if sido_hint else None)
 
         compact = _compact(raw)
-        if (code := self._alias_index.get(compact)) is not None:
+        code = self._alias_index.get(compact)
+        if own_code and code and code.startswith(PROVIDER_CODE_PREFIX) and code != own_code:
+            code = None  # two 조달청 codes, one name: each record keeps its own code's
+        if code is not None:
             return Resolution(self._by_code[code], parsed.department, 1.0, "exact")
         # Named after its place, not run by it: at ingest its 조달청 code identifies it.
         own_body = _is_own_body(normalize(raw))
