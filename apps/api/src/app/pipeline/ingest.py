@@ -122,7 +122,10 @@ async def reresolve_institutions(session: AsyncSession, runtime: Runtime) -> dic
         groups.setdefault((raw, provider_code), []).append(doc_id)
     by_method: Counter[str] = Counter()
     before = len(runtime.registry)
-    for (raw, provider_code), ids in groups.items():
+    # Coded names first: 사전규격 records carry no 수요기관코드 at all (0 of 9,286 on live data,
+    # 2026-09-26), so they find a school or 공단 only by the exact name a coded 발주계획 or
+    # 입찰공고 registered. Row order would leave that to chance.
+    for (raw, provider_code), ids in sorted(groups.items(), key=lambda kv: kv[0][1] is None):
         res = await resolve_institution(session, runtime, raw, provider_code=provider_code)
         by_method[res.method] += len(ids)
         if res.institution is None:

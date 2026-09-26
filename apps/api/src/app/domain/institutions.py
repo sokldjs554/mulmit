@@ -78,6 +78,9 @@ _DEPT_SUFFIX_RE = re.compile(
     r"^[가-힣A-Za-z0-9·]{2,}(?:과|팀|담당관|사업소|센터|보건소|국|실|단|본부|추진단|지원단)$"
 )
 _SIGUNGU_RE = re.compile(r"([가-힣]{1,5}(?:시|군|구))(?:청)?$")
+# "사단법인 한국복숭아생산자협의회" is no 의회, and "해군 잠수함수리창" no 군.
+_COUNCIL_RE = re.compile(r"(?<!협)의회")
+_ARMED_FORCES = frozenset({"육군", "해군", "공군"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,7 +139,7 @@ def _strip_sido_prefix(token: str) -> str:
 
 def parse_name(raw: str) -> ParsedName:
     text = normalize(raw).replace("(", " ").replace(")", " ").strip()
-    is_council = "의회" in text
+    is_council = _COUNCIL_RE.search(text) is not None
     is_education = "교육청" in text or "교육지원청" in text
     sido_match = _SIDO_RE.search(text)
     sido = _SIDO_LOOKUP[sido_match.group(0)] if sido_match else None
@@ -144,6 +147,8 @@ def parse_name(raw: str) -> ParsedName:
     department: str | None = None
     sigungu: str | None = None
     for tok in text.split():
+        if tok in _ARMED_FORCES:
+            continue
         tok_clean = tok.replace("의회", "")
         # "강남구청장", "성남시장", "영월군수" name the institution through its head.
         tok_clean = re.sub(r"^([가-힣]{1,5}(?:구|시|군))(?:청장|장|수)$", r"\1", tok_clean)
@@ -189,8 +194,15 @@ def parse_name(raw: str) -> ParsedName:
     )
 
 
-# Bodies of their own that often follow a 시도 name: "경기도 신성중학교", "서울시 강서구시설관리공단".
-_NOT_SIDO_OFFICE = ("학교", "공사", "공단", "조합")
+# Bodies of their own that often carry a 시도 or 시군구 name: "경기도 신성중학교", "서울시
+# 강서구시설관리공단", and on 30 days of 조달청 data (2026-09-26) "충청남도 천안의료원", "재단법인
+# 영동군 문화관광재단", "경주시 수산업협동조합", "사단법인 거제시관광협의회", "한국국제기아대책기구".
+# A 군's 보건의료원 is the 군's own office, like a 보건소.
+_OWN_BODY = ("학교", "공사", "공단", "조합", "재단", "의료원", "협의회", "기구")
+
+
+def _is_own_body(text: str) -> bool:
+    return any(w in text.replace("보건의료원", "") for w in _OWN_BODY)
 
 
 def _leading_sido(text: str) -> str | None:
@@ -213,10 +225,7 @@ def _is_sido_only(text: str, sido: str | None) -> bool:
     wrong demand owner."""
     if sido is None or _leading_sido(text) != sido:
         return False
-    return not any(
-        any(w in t for w in _NOT_SIDO_OFFICE) or _SIDO_LOOKUP.get(t, sido) != sido
-        for t in text.split()[1:]
-    )
+    return not any(_is_own_body(t) or _SIDO_LOOKUP.get(t, sido) != sido for t in text.split()[1:])
 
 
 class InstitutionRegistry:
@@ -279,8 +288,10 @@ class InstitutionRegistry:
         compact = _compact(raw)
         if (code := self._alias_index.get(compact)) is not None:
             return Resolution(self._by_code[code], parsed.department, 1.0, "exact")
+        # Named after its place, not run by it: at ingest its 조달청 code identifies it.
+        own_body = _is_own_body(normalize(raw))
 
-        if parsed.sigungu:
+        if parsed.sigungu and not own_body:
             pool = self._by_sigungu.get(parsed.sigungu, [])
             wanted: InstitutionKind = "council" if parsed.is_council else "local_gov"
             pool = [i for i in pool if i.kind == wanted] or pool
@@ -296,7 +307,7 @@ class InstitutionRegistry:
                 return Resolution(
                     None, parsed.department, 0.0, "ambiguous", [(i.code, 1.0) for i in pool]
                 )
-        elif parsed.sido_only and not parsed.is_education:
+        elif parsed.sido_only and not parsed.is_education and not own_body:
             # "경기도" alone, or "제주특별자치도 관광정책과".
             wanted_sido: InstitutionKind = "council" if parsed.is_council else "local_gov"
             sido_level = self._sido_level.get((parsed.sido or "", wanted_sido), [])
@@ -306,7 +317,8 @@ class InstitutionRegistry:
         found = self._fuzzy(compact, parsed.department, fuzzy_threshold)
         inst = found.institution
         if inst is not None and (
-            (parsed.department and any(w in parsed.department for w in _NOT_SIDO_OFFICE))
+            (own_body and inst.kind in ("local_gov", "council"))
+            or (parsed.department and _is_own_body(parsed.department))
             or ((lead := _leading_sido(normalize(raw))) is not None and inst.sido != lead)
             or (
                 parsed.sigungu
@@ -353,6 +365,8 @@ def _compact(text: str) -> str:
 def looks_like_local_government(raw: str) -> bool:
     """A 시도, 시군구 or council by the shape of the name. One the table does not know is a gap in
     the table, to be seen in the review queue, not a new institution."""
+    if _is_own_body(normalize(raw)):
+        return False
     parsed = parse_name(raw)
     return parsed.sigungu is not None or parsed.sido_only or parsed.is_council
 

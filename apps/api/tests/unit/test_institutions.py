@@ -90,6 +90,12 @@ def test_parse_name_splits_department() -> None:
         "경기주택도시공사",
         "경기도 신성중학교",
         "서울시 강서구시설관리공단",
+        # Bodies of their own named after a 시도 or 시군구 (live shapes, 2026-09-26).
+        "충청남도 청양의료원",
+        "재단법인 보은군 문화관광재단",
+        "경상북도 영덕군 수산업협동조합",
+        "진주시 시설관리공단",
+        "재단법인 부산광역시 중구 문화재단",
     ],
 )
 def test_names_that_only_carry_a_place_name_stay_unresolved(registry, raw: str) -> None:  # type: ignore[no-untyped-def]
@@ -227,6 +233,14 @@ def test_provider_institution_reads_kind_and_sido_off_the_name(
         ("충북대학교병원", False),
         ("서울특별시중부교육청 선린중학교", False),
         ("경기도 신성중학교", False),
+        # Not councils or 군 at all; each comes with a 조달청 code and becomes its own institution.
+        ("사단법인 통영시관광협의회", False),
+        ("사회복지법인 전라남도사회복지협의회", False),
+        ("해군 정비창", False),
+        ("국방부 국군조직 육군 제5군수지원사령부", False),
+        ("사단법인 한국국제구호기구", False),
+        ("충청남도 청양의료원", False),
+        ("재단법인 보은군 문화관광재단", False),
     ],
 )
 def test_local_government_shape(raw: str, expected: bool) -> None:
@@ -249,3 +263,10 @@ def test_provider_name_never_takes_over_a_table_name() -> None:
     registry = load_registry_csv()
     registry.add(provider_institution("9999999", "서울특별시 강남구"))
     assert registry.resolve("서울특별시 강남구").institution.code == "LG-11680"
+
+
+def test_county_health_center_hospital_is_the_county() -> None:
+    # A 군's 보건의료원 is its 보건소; a 지방의료원 is a body of its own.
+    registry = load_registry_csv()
+    assert registry.resolve("충청남도 청양군 보건의료원").institution.code == "LG-44790"
+    assert registry.resolve("충청남도 청양의료원").institution is None

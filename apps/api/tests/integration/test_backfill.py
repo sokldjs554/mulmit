@@ -267,3 +267,47 @@ async def test_reresolve_picks_up_documents_stored_before_the_table_knew_them(
     assert after == ("G2B-7069990", "pending", "provider")
     assert report["resolved"] >= 1
     assert report["institutions_added"] >= 1
+
+
+async def test_reresolve_gives_a_codeless_prespec_the_institution_its_bid_names(
+    demo_world, runtime
+) -> None:  # type: ignore[no-untyped-def]
+    # 사전규격 responses have no institution code; the same name on a coded 공고 supplies it,
+    # even when the 사전규격 was stored first.
+    rt = dataclasses.replace(runtime, registry=load_registry_csv())
+    prespec = map_item(
+        "prespec",
+        {
+            "bfSpecRgstNo": "R26BD90000020",
+            "prdctClsfcNoNm": "본관 냉난방기 교체",
+            "rcptDt": "2026-09-14 10:00:00",
+            "orderInsttNm": "테스트시설관리공단",
+            "rlDminsttNm": "테스트시설관리공단",
+            "asignBdgtAmt": "88000000",
+        },
+    )
+    bid = map_item(
+        "bid_notice",
+        BID
+        | {
+            "bidNtceNo": "R26BK90000020",
+            "bidNtceNm": "본관 냉난방기 교체",
+            "dminsttCd": "B559990",
+            "dminsttNm": "테스트시설관리공단",
+            "bfSpecRgstNo": "R26BD90000020",
+        },
+    )
+    assert prespec is not None and bid is not None
+    assert prespec.provider_institution_code is None
+    async with get_sessionmaker()() as s:
+        source = Source(key="test_g2b_order", name="t", adapter="g2b", enabled=False, config={})
+        s.add(source)
+        await s.flush()
+        bid.provider_institution_code = None  # both stored before codes were used
+        docs = [(await upsert_record(s, source, rec, rt))[0] for rec in (prespec, bid)]
+        await reresolve_institutions(s, rt)
+        for doc in docs:
+            await s.refresh(doc)
+        codes = [d.institution_code for d in docs]
+        await s.rollback()
+    assert codes == ["G2B-B559990", "G2B-B559990"]
