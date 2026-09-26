@@ -111,6 +111,83 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  e2e:
+    name: E2E · README walkthrough in a browser
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U app" --health-interval 3s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      APP_LOG_JSON: "false"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - name: OCR engine and Korean fonts (the demo world includes scanned budget books)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-kor fonts-nanum
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.8.17"
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - name: Seed the walkthrough world (the one the README GIF shows)
+        working-directory: apps/api
+        # anchored on today (KST) because the API reads the real date for windows and lead times
+        run: |
+          uv sync --frozen
+          uv run manage db upgrade
+          uv run manage seed --anchor "$(TZ=Asia/Seoul date +%F)" --scale 1.5
+          uv run manage demo run
+      - name: Start the API
+        working-directory: apps/api
+        run: |
+          nohup uv run uvicorn --factory app.api.app:create_app --port 8000 > "$RUNNER_TEMP/api.log" 2>&1 &
+          for _ in $(seq 1 30); do curl -fsS localhost:8000/healthz > /dev/null && exit 0; sleep 1; done
+          cat "$RUNNER_TEMP/api.log"; exit 1
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: apps/web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - name: Build and start the web app (production build, BFF pointed at the API)
+        working-directory: apps/web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          API_ORIGIN=http://localhost:8000 nohup pnpm start -p 3000 > "$RUNNER_TEMP/web.log" 2>&1 &
+          for _ in $(seq 1 30); do curl -fsS localhost:3000/ > /dev/null && exit 0; sleep 1; done
+          cat "$RUNNER_TEMP/web.log"; exit 1
+      - name: Playwright
+        working-directory: apps/web
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm exec playwright test
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: e2e-report
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+            ${{ runner.temp }}/api.log
+            ${{ runner.temp }}/web.log
+          if-no-files-found: ignore
+
   terraform:
     name: Terraform · fmt, validate
     runs-on: ubuntu-24.04

@@ -15,7 +15,7 @@
 
 ![30초 둘러보기: 랜딩 → 데모 → 기회 피드 → 기회 상세 → 영업 브리핑](docs/screenshots/walkthrough.gif)
 
-<sub>화면과 수치는 모두 합성 데모 데이터입니다(아래 [평가](#평가) 참고). GIF와 스크린샷은 사례가 더 많은 `manage seed --scale 1.5` 세계에서 찍었고(기본 `make demo`는 1.0), LLM 키 없이 규칙 기반 추출기와 템플릿 브리핑으로 돌아갑니다.</sub>
+<sub>화면과 수치는 모두 합성 데모 데이터입니다(아래 [평가](#평가) 참고). GIF와 스크린샷은 사례가 더 많은 `manage seed --scale 1.5` 세계에서 찍었고(같은 화면은 `make demo SCALE=1.5`, 기본값 1.0은 평가 수치의 기준), LLM 키 없이 규칙 기반 추출기와 템플릿 브리핑으로 돌아갑니다. 같은 경로(데모 로그인 → 피드 → 입찰 진행 → 상세 → 브리핑)를 CI의 E2E 작업이 실제 브라우저로 매번 따라가 봅니다.</sub>
 
 ---
 
@@ -110,7 +110,7 @@
 | Docker 기반 개발 환경 구성 경험 | `docker compose up`으로 DB·Redis·메일·API·워커·웹 |
 | 로깅·에러 트래킹 기반 장애 대응 경험 | structlog JSON(요청·작업 ID), Sentry, 워커 헬스체크, 런북 |
 | Git 브랜치 전략과 코드 리뷰 기반 협업 경험 | 짧은 브랜치 + 트렁크, squash merge, Conventional Commits, PR 템플릿, CODEOWNERS. PR 예: [#6](https://github.com/sokldjs554/procurement-forecast/pull/6) 의존성 PR 검토(액션 10개 호환성 대조), [#7](https://github.com/sokldjs554/procurement-forecast/pull/7) 기능 PR(코드 리뷰 15건 중 13건 반영, 2건은 이유 답변). 초기 구축은 main 직접 커밋 ([CONTRIBUTING](CONTRIBUTING.md)) |
-| 테스트 작성 및 정적 타입 검사를 습관으로 갖춘 분 | pytest 134개(실제 PostgreSQL·Redis), vitest 13개, mypy strict, CI 필수 통과 |
+| 테스트 작성 및 정적 타입 검사를 습관으로 갖춘 분 | pytest 206개(실제 PostgreSQL·Redis), vitest 44개(BFF 프록시 헤더, 과금 요청의 재시도·멱등 키 포함), Playwright E2E 3개(README 둘러보기를 실제 브라우저로), mypy strict, CI 필수 통과 |
 | 명세가 불완전한 상태에서 구조를 세우고 문서로 남길 수 있는 능력 | 주요업무 9번 |
 
 </details>
