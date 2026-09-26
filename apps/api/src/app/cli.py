@@ -331,6 +331,20 @@ def pipeline_run(
     typer.echo(json.dumps(_run(lambda: _with_session(go)), ensure_ascii=False, indent=2))
 
 
+@pipeline_app.command("reresolve")
+def pipeline_reresolve() -> None:
+    """Resolve institutions again for documents that had none, with the current table, and
+    queue those that resolve for `manage pipeline run`. Nothing is refetched."""
+    configure_logging(json=False, level="WARNING", stream=sys.stderr)
+
+    async def go(session: Any, runtime: Any) -> dict[str, Any]:
+        from app.pipeline.ingest import reresolve_institutions
+
+        return await reresolve_institutions(session, runtime)
+
+    typer.echo(json.dumps(_run(lambda: _with_session(go)), ensure_ascii=False, indent=2))
+
+
 @app.command()
 def bench(
     scale: float = typer.Option(1.0, help="Multiply the default row counts"),

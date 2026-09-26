@@ -9,6 +9,10 @@ Why this is harder than it looks:
   executive via ``executive_code``; the council is kept as the *speaker*.
 * Departments are noise for identity but signal for sales ("스마트도시과" is who to call), so they
   are split off and kept.
+* Most of what 조달청 buys for is not a 지자체: on 30 days of live data (2026-09-26) schools,
+  hospitals, universities and 공사·공단 made up most of 6,344 수요기관 names. Those records carry the
+  provider's own institution code, so they are identified by that code instead of by name
+  (:func:`provider_institution`); names are only guessed where no code comes with them.
 """
 
 from __future__ import annotations
@@ -46,6 +50,27 @@ SIDO_ALIASES: dict[str, tuple[str, ...]] = {
     "제주특별자치도": ("제주특별자치도", "제주도", "제주"),
 }
 _SIDO_LOOKUP = {alias: full for full, aliases in SIDO_ALIASES.items() for alias in aliases}
+# 법정동코드 시도 part; the profile's region filter speaks these.
+SIDO_REGION_CODES: dict[str, str] = {
+    "서울특별시": "11",
+    "부산광역시": "26",
+    "대구광역시": "27",
+    "인천광역시": "28",
+    "광주광역시": "29",
+    "대전광역시": "30",
+    "울산광역시": "31",
+    "세종특별자치시": "36",
+    "경기도": "41",
+    "강원특별자치도": "51",
+    "충청북도": "43",
+    "충청남도": "44",
+    "전북특별자치도": "52",
+    "전라남도": "46",
+    "경상북도": "47",
+    "경상남도": "48",
+    "제주특별자치도": "50",
+}
+PROVIDER_CODE_PREFIX = "G2B-"
 # Longest alias first so "서울특별시" wins over "서울".
 _SIDO_RE = re.compile("|".join(sorted(map(re.escape, _SIDO_LOOKUP), key=len, reverse=True)))
 
@@ -89,7 +114,7 @@ class Resolution:
     institution: Institution | None
     department: str | None
     score: float
-    method: Literal["code", "exact", "context", "fuzzy", "ambiguous", "none"]
+    method: Literal["code", "exact", "context", "fuzzy", "ambiguous", "provider", "none"]
     candidates: list[tuple[str, float]] = field(default_factory=list)
 
     @property
@@ -198,6 +223,7 @@ class InstitutionRegistry:
     def __init__(self, institutions: Iterable[Institution]) -> None:
         self._by_code: dict[str, Institution] = {}
         self._by_sigungu: dict[str, list[Institution]] = {}
+        self._sido_level: dict[tuple[str, InstitutionKind], list[Institution]] = {}
         self._alias_index: dict[str, str] = {}
         self._jamo_index: dict[str, str] = {}
         for inst in institutions:
@@ -205,10 +231,17 @@ class InstitutionRegistry:
 
     def add(self, inst: Institution) -> None:
         self._by_code[inst.code] = inst
+        if inst.code.startswith(PROVIDER_CODE_PREFIX):
+            # Known by code. Exact spellings still find it, but it stays out of the sigungu pools
+            # and the fuzzy index, and never takes a name over from the curated table.
+            self._alias_index.setdefault(_compact(inst.name), inst.code)
+            return
         if inst.sigungu:
             self._by_sigungu.setdefault(inst.sigungu, []).append(inst)
+        else:
+            self._sido_level.setdefault((inst.sido, inst.kind), []).append(inst)
         for alias in (inst.name, *inst.aliases):
-            compact = re.sub(r"\s+", "", normalize(alias))
+            compact = _compact(alias)
             self._alias_index[compact] = inst.code
             self._jamo_index[to_jamo(compact)] = inst.code
 
@@ -230,17 +263,20 @@ class InstitutionRegistry:
         *,
         sido_hint: str | None = None,
         code_hint: str | None = None,
+        provider_code: str | None = None,
         fuzzy_threshold: float = 90.0,
     ) -> Resolution:
         if code_hint and (inst := self._by_code.get(code_hint)):
             dept = parse_name(raw).department if raw else None
             return Resolution(inst, dept, 1.0, "code")
+        if provider_code and (inst := self._by_code.get(PROVIDER_CODE_PREFIX + provider_code)):
+            return Resolution(inst, None, 1.0, "code")
         if not raw or not raw.strip():
             return Resolution(None, None, 0.0, "none")
         parsed = parse_name(raw)
         sido = parsed.sido or (_SIDO_LOOKUP.get(sido_hint, sido_hint) if sido_hint else None)
 
-        compact = re.sub(r"\s+", "", normalize(raw))
+        compact = _compact(raw)
         if (code := self._alias_index.get(compact)) is not None:
             return Resolution(self._by_code[code], parsed.department, 1.0, "exact")
 
@@ -263,11 +299,7 @@ class InstitutionRegistry:
         elif parsed.sido_only and not parsed.is_education:
             # "경기도" alone, or "제주특별자치도 관광정책과".
             wanted_sido: InstitutionKind = "council" if parsed.is_council else "local_gov"
-            sido_level = [
-                i
-                for i in self._by_code.values()
-                if i.sido == parsed.sido and i.sigungu is None and i.kind == wanted_sido
-            ]
+            sido_level = self._sido_level.get((parsed.sido or "", wanted_sido), [])
             if len(sido_level) == 1:
                 return Resolution(sido_level[0], parsed.department, 0.95, "exact")
 
@@ -314,9 +346,47 @@ class InstitutionRegistry:
         return Resolution(None, department, 0.0, "none", ranked[:3])
 
 
+def _compact(text: str) -> str:
+    return re.sub(r"\s+", "", normalize(text))
+
+
+def looks_like_local_government(raw: str) -> bool:
+    """A 시도, 시군구 or council by the shape of the name. One the table does not know is a gap in
+    the table, to be seen in the review queue, not a new institution."""
+    parsed = parse_name(raw)
+    return parsed.sigungu is not None or parsed.sido_only or parsed.is_council
+
+
+def provider_institution(code: str, name: str) -> Institution:
+    """An institution known only from a provider record: 조달청's 수요기관코드 and name. Kind and
+    시도 are read off the name for display and the region filter, and left blank when the name
+    does not say ("한국농어촌공사"). "대구대학교" reads as 대구 though it sits in 경산: good enough
+    for an 8% ranking feature, and never used for identity."""
+    name = normalize(name).strip()
+    head = name.split()[0] if name.split() else name
+    kind: InstitutionKind
+    if name.endswith(("교육청", "교육지원청")):
+        kind = "education_office"
+    elif head.endswith(("부", "처", "청")) and "교육" not in head:
+        kind = "central"  # 조달청, 국토교통부 …, 국회사무처
+    else:
+        kind = "public_agency"  # 학교, 병원, 대학교, 공사·공단, 연구원
+    m = _SIDO_RE.match(name)
+    sido = _SIDO_LOOKUP[m.group(0)] if m else ""
+    return Institution(
+        code=PROVIDER_CODE_PREFIX + code,
+        name=name,
+        kind=kind,
+        sido=sido,
+        sigungu=None,
+        region_code=SIDO_REGION_CODES.get(sido, ""),
+    )
+
+
 def load_registry_csv(path: str | None = None) -> InstitutionRegistry:
-    """Load the institution table. The bundled CSV is a curated subset for the demo; production
-    imports the 행정표준코드 table through the admin console."""
+    """Load the institution table: every 시도·시군구, their councils and the 시도 교육청, built by
+    ``scripts/build_institutions.py`` from 행정안전부 행정동코드. Everything else (schools,
+    hospitals, 공사·공단, 국가기관) arrives with a provider code; see :func:`provider_institution`."""
     if path is None:
         ref = resources.files("app.domain").joinpath("data/institutions.csv")
         text = ref.read_text(encoding="utf-8")

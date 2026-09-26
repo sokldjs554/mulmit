@@ -79,7 +79,7 @@
 | 비정형 문서 파싱과 OCR 파이프라인 정확도 개선 | PDF 페이지별 텍스트층 판정 → 부족한 페이지만 OCR(tesseract `kor+eng`) + 후보정(문자 오류율 1.13% → 0.99%, 금액 100%), HWP5 레코드 파서, HWPX | [`parsing/`](apps/api/src/app/parsing) |
 | 멀티채널 알림 발송(이메일·메신저)과 구독·크레딧 결제 도메인 개발 | 이메일·Slack·카카오 알림톡, 중복 방지·방해 금지 시간. 토스 정기결제(빌링키 암호화, 멱등 결제, 웹훅 대사, 1·3·7일 재시도) + 추가 전용 크레딧 원장 | [`notify/`](apps/api/src/app/notify), [`billing/`](apps/api/src/app/billing), [ADR-0005](docs/adr/0005-credit-ledger.md) |
 | 클라우드 컨테이너 서비스 배포·운영과 로깅·에러 트래킹 기반 장애 대응 | Docker 이미지 2개, GCP Cloud Run(API 내부 전용·워커 헬스체크)·Cloud SQL·Memorystore Terraform, 키 없는 배포(WIF), structlog JSON, Sentry, 런북 | [`infra/`](infra/terraform), [배포 워크플로](.github/workflows/deploy.yml), [런북](docs/runbook.md) |
-| 명세가 불완전한 요구사항을 구조로 세우고, 결정을 문서로 남기는 일 | ADR 10건(주제 선정부터 크롤러·대용량 인덱스까지), 시장 조사, 아키텍처·데이터 소스·평가·성능 문서 | [`docs/`](docs), [ADR 목록](docs/adr/README.md) |
+| 명세가 불완전한 요구사항을 구조로 세우고, 결정을 문서로 남기는 일 | ADR 11건(주제 선정부터 크롤러·대용량 인덱스·기관 식별까지), 시장 조사, 아키텍처·데이터 소스·평가·성능 문서 | [`docs/`](docs), [ADR 목록](docs/adr/README.md) |
 
 ### 우대사항
 
@@ -110,7 +110,7 @@
 | Docker 기반 개발 환경 구성 경험 | `docker compose up`으로 DB·Redis·메일·API·워커·웹 |
 | 로깅·에러 트래킹 기반 장애 대응 경험 | structlog JSON(요청·작업 ID), Sentry, 워커 헬스체크, 런북 |
 | Git 브랜치 전략과 코드 리뷰 기반 협업 경험 | 짧은 브랜치 + 트렁크, squash merge, Conventional Commits, PR 템플릿, CODEOWNERS. PR 예: [#6](https://github.com/sokldjs554/procurement-forecast/pull/6) 의존성 PR 검토(액션 10개 호환성 대조), [#7](https://github.com/sokldjs554/procurement-forecast/pull/7) 기능 PR(코드 리뷰 15건 중 13건 반영, 2건은 이유 답변). 초기 구축은 main 직접 커밋 ([CONTRIBUTING](CONTRIBUTING.md)) |
-| 테스트 작성 및 정적 타입 검사를 습관으로 갖춘 분 | pytest 236개(실제 PostgreSQL·Redis), vitest 44개(BFF 프록시 헤더, 과금 요청의 재시도·멱등 키 포함), Playwright E2E 3개(README 둘러보기를 실제 브라우저로), mypy strict, CI 필수 통과 |
+| 테스트 작성 및 정적 타입 검사를 습관으로 갖춘 분 | pytest 268개(실제 PostgreSQL·Redis), vitest 44개(BFF 프록시 헤더, 과금 요청의 재시도·멱등 키 포함), Playwright E2E 3개(README 둘러보기를 실제 브라우저로), mypy strict, CI 필수 통과 |
 | 명세가 불완전한 상태에서 구조를 세우고 문서로 남길 수 있는 능력 | 주요업무 9번 |
 
 </details>

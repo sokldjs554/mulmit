@@ -9,10 +9,11 @@ import httpx
 from pydantic import SecretStr
 from sqlalchemy import delete, func, select
 
-from app.db.models import Document, IngestRun, OpportunitySignal, Source
+from app.db.models import Document, IngestRun, InstitutionRow, OpportunitySignal, Signal, Source
 from app.db.session import get_sessionmaker, session_scope
+from app.domain.institutions import load_registry_csv
 from app.pipeline.backfill import ingest_window
-from app.pipeline.ingest import upsert_record
+from app.pipeline.ingest import reresolve_institutions, upsert_record
 from app.pipeline.link import link_signals
 from app.pipeline.process import process_document
 from app.sources import registry as registry_module
@@ -178,3 +179,91 @@ async def test_look_alike_plans_with_different_numbers_stay_apart(demo_world, ru
     plan1, plan2, bid_signal = signal_ids
     assert opp_of[plan1] != opp_of[plan2]
     assert opp_of[bid_signal] == opp_of[plan2]
+
+
+SCHOOL_PLAN = {
+    "orderPlanUntyNo": "R26DD90000010",
+    "bizNm": "2027학년도 신입생 교복(동복)",
+    "nticeDt": "2026-09-21 16:01:50",
+    "orderInsttCd": "7069990",
+    "orderInsttNm": "서울특별시중부교육청 테스트중학교",
+    "sumOrderAmt": "29315000",
+    "orderYear": "2027",
+    "orderMnth": "02",
+}
+
+
+async def test_a_school_is_known_by_its_procurement_code(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
+    rt = dataclasses.replace(runtime, registry=load_registry_csv())
+    async with get_sessionmaker()() as s:
+        source = Source(key="test_g2b_school", name="t", adapter="g2b", enabled=False, config={})
+        s.add(source)
+        await s.flush()
+        first = map_item("order_plan", SCHOOL_PLAN)
+        later = map_item(
+            "order_plan",
+            SCHOOL_PLAN | {"orderPlanUntyNo": "R26DD90000011", "orderInsttNm": "테스트중학교"},
+        )
+        assert first is not None and later is not None
+        doc1, _ = await upsert_record(s, source, first, rt)
+        doc2, _ = await upsert_record(s, source, later, rt)
+        row = await s.get(InstitutionRow, "G2B-7069990")
+        stored = (row.name, row.kind, row.sido, row.region_code) if row else None
+        signal_ids = (await process_document(s, rt, doc1.id)).signal_ids
+        verdict = await s.scalar(select(Signal.verdict).where(Signal.id == signal_ids[0]))
+        methods = (
+            doc1.structured["institution_resolution"],
+            doc2.structured["institution_resolution"],
+        )
+        codes = (doc1.institution_code, doc2.institution_code)
+        await s.rollback()
+    assert stored == (
+        "서울특별시중부교육청 테스트중학교",
+        "public_agency",
+        "서울특별시",
+        "11",
+    )
+    assert codes == ("G2B-7069990", "G2B-7069990")
+    assert methods == ("provider", "code")  # the second one never reaches name matching
+    assert verdict == "accepted"  # so it is linked, not left in the review queue
+
+
+async def test_a_local_government_the_table_misses_goes_to_review(demo_world, runtime) -> None:  # type: ignore[no-untyped-def]
+    rt = dataclasses.replace(runtime, registry=load_registry_csv())
+    item = SCHOOL_PLAN | {"orderInsttCd": "3999990", "orderInsttNm": "인천광역시 제물포구"}
+    async with get_sessionmaker()() as s:
+        source = Source(key="test_g2b_gap", name="t", adapter="g2b", enabled=False, config={})
+        s.add(source)
+        await s.flush()
+        rec = map_item("order_plan", item)
+        assert rec is not None
+        doc, _ = await upsert_record(s, source, rec, rt)
+        stored = await s.get(InstitutionRow, "G2B-3999990")
+        await s.rollback()
+    assert doc.institution_code is None
+    assert stored is None
+
+
+async def test_reresolve_picks_up_documents_stored_before_the_table_knew_them(
+    demo_world, runtime
+) -> None:  # type: ignore[no-untyped-def]
+    rt = dataclasses.replace(runtime, registry=load_registry_csv())
+    async with get_sessionmaker()() as s:
+        source = Source(key="test_g2b_again", name="t", adapter="g2b", enabled=False, config={})
+        s.add(source)
+        await s.flush()
+        rec = map_item("order_plan", SCHOOL_PLAN)
+        assert rec is not None
+        rec.provider_institution_code = None  # as ingested before codes were used
+        doc, _ = await upsert_record(s, source, rec, rt)
+        await process_document(s, rt, doc.id)
+        before = (doc.institution_code, doc.parse_status)
+
+        report = await reresolve_institutions(s, rt)
+        await s.refresh(doc)
+        after = (doc.institution_code, doc.parse_status, doc.structured["institution_resolution"])
+        await s.rollback()
+    assert before == (None, "parsed")
+    assert after == ("G2B-7069990", "pending", "provider")
+    assert report["resolved"] >= 1
+    assert report["institutions_added"] >= 1

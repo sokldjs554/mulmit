@@ -20,7 +20,7 @@
 3. 필요하면 `APP_LLM_DAILY_BUDGET_USD`를 올립니다. 한도 초과 동안의 문서는 규칙 기반 추출기로 처리되어 `degraded:budget_exceeded` 사유로 검토 대기열에 들어가 있습니다.
 
 **검토 대기열이 쌓임**
-- 사유별로 봅니다. `institution_unresolved`가 대부분이면 기관 사전(`domain/data/institutions.csv`)에 별칭을 추가합니다. `year_unverified`가 대부분이면 시점 해석기(`domain/timing.py`)에 표현을 추가하고 수기 평가 세트에 사례를 넣습니다.
+- 사유별로 봅니다. `institution_unresolved`가 대부분이면 기관 사전(`domain/data/institutions.csv`)에 별칭을 추가하거나, 행정구역이 바뀌었다면 `scripts/build_institutions.py`로 사전을 다시 만듭니다. 배포 뒤 `manage pipeline reresolve` → `manage pipeline run`으로 이미 쌓인 문서의 기관을 다시 풀고 처리합니다(다시 받지 않음). `year_unverified`가 대부분이면 시점 해석기(`domain/timing.py`)에 표현을 추가하고 수기 평가 세트에 사례를 넣습니다.
 - 승인/수정하면 해당 신호의 연결 작업이 다시 돕니다.
 
 ## 작업 큐
